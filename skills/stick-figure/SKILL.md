@@ -69,7 +69,8 @@ More: `examples/contagious-yawns.json` (three people), `examples/procrastination
 (add `"board": "text"` for the chalkboard), `night` (stars and moon), `plain` (add `"background": "#hex"`).
 
 **Figures** (`x` from 0 = left edge to 1 = right edge; use -0.2 or 1.2 to start off-screen and walk in). Three people fit
-a vertical video comfortably (x 0.2, 0.5, 0.8); a fourth needs `scale` ~0.85 and ~0.22 spacing; pets take little room.
+a vertical video comfortably (x 0.2, 0.5, 0.8); a fourth needs `scale` ~0.85 and ~0.22 spacing. A dog or cat side-on is about 0.35 of the frame wide (`x` is
+its body; the nose is ~0.2 ahead): stop a pet ~0.3 from the person it runs to.
 Keep name labels short ("Bill", not "The bill"):
 - `kind`: `person` (default), `cat`, `dog` (side-on, about a third of a person's height).
 - `id`, `x`, `label` (a name under their feet: "You", "Your brain"), `scale` (0.6-0.8 for a child), `facing`
