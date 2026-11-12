@@ -32,8 +32,8 @@ animation in a headless browser) and ffmpeg (it encodes the MP4).
 
 ### The Claude app (claude.ai)
 
-Each skill is also its own ZIP ([zachdfilms.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/zachdfilms.zip), [minimal-graphics.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/minimal-graphics.zip), [stick-figure.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/stick-figure.zip), [breakdown.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/breakdown.zip), [map-route.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/map-route.zip), [graph.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/graph.zip)). Code execution must be on (Settings → Capabilities). Then go to
-Customize → Skills, click **+**, **Create skill**, **Upload a skill**, and pick the ZIP. Skills you add there also show up
+Each skill is also its own ZIP ([zachdfilms.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/zachdfilms.zip), [minimal-graphics.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/minimal-graphics.zip), [stick-figure.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/stick-figure.zip), [breakdown.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/breakdown.zip), [map-route.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/map-route.zip), [graph.zip](https://github.com/maverickmaltin/claude-animate-skills/releases/latest/download/graph.zip)). First turn on Settings → Capabilities → **Create and edit files**
+(skills need it). Then go to Customize → Skills → **+ Add** → **Upload skill**, and pick the ZIP. Skills you add there also show up
 in Claude Code when you sign in with the same account.
 
 In the app, Claude runs skills in a cloud sandbox whose network access is limited to package servers by default, and it
