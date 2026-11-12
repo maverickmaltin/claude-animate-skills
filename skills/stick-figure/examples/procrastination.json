@@ -1,0 +1,11 @@
+{"title": "Why do we procrastinate?", "answer": "Your brain picks fun now over reward later", "scene": "office",
+ "props": [{"type": "desk", "x": 0.3}, {"type": "tv", "x": 0.86}, {"type": "plant", "x": 0.06}],
+ "figures": [{"id": "you", "x": 0.3, "label": "You", "hat": "hair"}, {"id": "boss", "x": 1.15, "tie": "#E2574C", "glasses": true, "label": "Deadline"}],
+ "beats": [
+   {"who": "you", "do": "think", "at": 0.2, "for": 1.2, "say": "I'll do it later"},
+   {"who": "you", "do": "walk", "at": 1.4, "for": 1.0, "to": 0.62},
+   {"who": "you", "do": "laugh", "at": 2.4, "for": 1.0},
+   {"who": "boss", "do": "run", "at": 2.6, "for": 0.9, "to": 0.88},
+   {"who": "boss", "do": "point", "at": 3.5, "for": 1.2, "to": "you", "say": "Due today!"},
+   {"who": "you", "do": "surprised", "at": 3.6, "for": 1.3}
+ ]}

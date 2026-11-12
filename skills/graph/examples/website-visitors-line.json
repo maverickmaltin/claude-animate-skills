@@ -1,0 +1,8 @@
+{
+  "title": "Website visitors",
+  "subtitle": "Sample data, two years by month",
+  "type": "line",
+  "theme": "mint",
+  "data": [["Jan 24", 4200], ["Feb", 4900], ["Mar", 5600], ["Apr", 5100], ["May", 6300], ["Jun", 7000], ["Jul", 6800], ["Aug", 7900], ["Sep", 9100], ["Oct", 8700], ["Nov", 10400], ["Dec", 12100],
+           ["Jan 25", 11800], ["Feb", 13500], ["Mar", 15200], ["Apr", 14600], ["May", 17300], ["Jun", 19800], ["Jul", 21500], ["Aug", 20900], ["Sep", 24600], ["Oct", 27100], ["Nov", 29800], ["Dec", 33400]]
+}

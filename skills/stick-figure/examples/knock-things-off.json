@@ -1,0 +1,97 @@
+{
+  "title": "Why do cats knock things off tables?",
+  "answer": "Hunting instinct, and it gets your attention",
+  "scene": "room",
+  "props": [
+    {
+      "type": "table",
+      "x": 0.62
+    },
+    {
+      "type": "cup",
+      "x": 0.7,
+      "on": "table",
+      "wobbleAt": 1.6,
+      "fallAt": 2.15
+    },
+    {
+      "type": "plant",
+      "x": 0.08
+    }
+  ],
+  "figures": [
+    {
+      "id": "cat",
+      "kind": "cat",
+      "x": 0.52,
+      "on": "table",
+      "head": "#F4A261",
+      "hatColor": "#F4A261"
+    },
+    {
+      "id": "you",
+      "x": 1.2,
+      "label": "You",
+      "hat": "hair",
+      "hatColor": "#6B4423"
+    }
+  ],
+  "beats": [
+    {
+      "who": "cat",
+      "do": "look",
+      "at": 0.0,
+      "for": 1.0,
+      "to": 0.7
+    },
+    {
+      "who": "cat",
+      "do": "swipe",
+      "at": 1.0,
+      "for": 1.2,
+      "to": 0.7,
+      "say": "Boop"
+    },
+    {
+      "who": "you",
+      "do": "run",
+      "at": 2.3,
+      "for": 0.8,
+      "to": 0.86
+    },
+    {
+      "who": "you",
+      "do": "surprised",
+      "at": 3.1,
+      "for": 0.9,
+      "say": "My mug!"
+    },
+    {
+      "who": "cat",
+      "do": "sit",
+      "at": 3.3,
+      "for": 1.0
+    },
+    {
+      "who": "you",
+      "do": "point",
+      "at": 4.1,
+      "for": 1.2,
+      "to": "cat"
+    },
+    {
+      "who": "cat",
+      "do": "love",
+      "at": 4.4,
+      "for": 1.0
+    }
+  ],
+  "arrows": [
+    {
+      "from": "cat",
+      "to": "you",
+      "at": 3.6,
+      "for": 0.4
+    }
+  ]
+}

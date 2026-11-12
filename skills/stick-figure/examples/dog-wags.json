@@ -1,0 +1,69 @@
+{
+  "title": "Why do dogs wag their tails?",
+  "answer": "It's how they show they're happy to see you",
+  "scene": "park",
+  "props": [
+    {
+      "type": "tree",
+      "x": 0.1
+    },
+    {
+      "type": "ball",
+      "x": 0.85
+    }
+  ],
+  "figures": [
+    {
+      "id": "dog",
+      "kind": "dog",
+      "x": 0.3
+    },
+    {
+      "id": "kid",
+      "x": 0.75,
+      "scale": 0.8,
+      "hat": "cap",
+      "hatColor": "#3B82F6"
+    }
+  ],
+  "beats": [
+    {
+      "who": "dog",
+      "do": "sleep",
+      "at": 0.0,
+      "for": 1.4
+    },
+    {
+      "who": "kid",
+      "do": "wave",
+      "at": 0.8,
+      "for": 1.0,
+      "say": "Hi buddy!"
+    },
+    {
+      "who": "dog",
+      "do": "jump",
+      "at": 1.6,
+      "for": 1.4
+    },
+    {
+      "who": "dog",
+      "do": "run",
+      "at": 3.0,
+      "for": 0.8,
+      "to": 0.55
+    },
+    {
+      "who": "dog",
+      "do": "wag",
+      "at": 3.8,
+      "for": 1.2
+    },
+    {
+      "who": "kid",
+      "do": "cheer",
+      "at": 4.0,
+      "for": 1.0
+    }
+  ]
+}

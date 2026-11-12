@@ -1,0 +1,15 @@
+{
+  "title": "Why are yawns contagious?",
+  "answer": "Your brain copies what it sees",
+  "scene": "street",
+  "props": [{"type": "bus-stop", "x": 0.955}],
+  "figures": [{"id": "a", "x": 0.19}, {"id": "b", "x": 0.5}, {"id": "c", "x": 0.81}],
+  "beats": [
+    {"who": "a", "do": "yawn", "at": 0.0, "for": 1.4, "say": "Yaaawn"},
+    {"who": "b", "do": "look", "at": 0.6, "for": 0.5, "to": "a"},
+    {"who": "b", "do": "yawn", "at": 1.0, "for": 1.3, "say": "Yaawwn"},
+    {"who": "c", "do": "look", "at": 1.5, "for": 0.5, "to": "b"},
+    {"who": "c", "do": "yawn", "at": 1.9, "for": 1.4, "say": "Yaaaawn"}
+  ],
+  "arrows": [{"from": "a", "to": "b", "at": 0.55, "for": 0.35}, {"from": "b", "to": "c", "at": 1.42, "for": 0.32}]
+}

@@ -1,0 +1,10 @@
+{"title": "Inside a mechanical keyboard", "theme": "light",
+ "parts": [
+  {"name": "Keycaps", "shape": "slab", "size": [16.5, 7, 16.5], "radius": 2.5, "material": "white", "grid": {"nx": 14, "nz": 5, "pitch": 19}, "y": 19, "level": 4},
+  {"name": "Switches", "shape": "box", "size": [14, 10, 14], "material": "plastic", "color": "#E34234", "grid": {"nx": 14, "nz": 5, "pitch": 19}, "y": 9, "level": 3},
+  {"name": "Steel plate", "shape": "slab", "size": [276, 1.5, 98], "radius": 3, "material": "steel", "y": 10.5, "level": 2},
+  {"name": "Circuit board", "shape": "slab", "size": [276, 1.6, 98], "radius": 3, "material": "pcb", "y": 7, "level": 1},
+  {"name": "Sound foam", "shape": "slab", "size": [270, 3.5, 92], "radius": 3, "material": "foam", "y": 3, "level": 0.5},
+  {"name": "Aluminum case", "shape": "frame", "size": [296, 22, 116], "radius": 8, "wall": 9, "material": "aluminum", "color": "#3a3f47", "y": 0, "level": 0},
+  {"name": "Case floor", "label": false, "shape": "slab", "size": [290, 3, 110], "radius": 7, "material": "aluminum", "color": "#3a3f47", "y": 0, "level": 0}
+ ]}

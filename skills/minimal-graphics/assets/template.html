@@ -1,0 +1,356 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>/minimal-graphics animation</title>
+<!--
+  The /minimal-graphics skill's animation: an idea explained with simple shapes, moving dots and clean motion.
+  Five patterns (spec "pattern"): spread (one thing reaching more and more: viral ideas, chain reactions), flow (steps in
+  order: how something works), cycle (a loop that repeats), converge (many things into one, or "out": one into many) and
+  compare (two or three amounts side by side). scripts/render.py inlines the spec where it says SPEC below and records
+  the page frame by frame; opened on its own, the page plays in a loop.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=block" rel="stylesheet">
+<style>
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+#stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; }
+canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<script>
+/* ---- animate-skills kit: timing, easing, text fitting and playback (the same in every template) ---- */
+window.SPEC = /*SPEC*/null;
+addEventListener('error', e => { if (!window.ready) window.renderError = String(e.message || e); });
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, q) => a + (b - a) * q;
+const prog = (t, t0, t1) => clamp((t - t0) / Math.max(1e-6, t1 - t0));
+const E = {
+  lin: x => x, out: x => 1 - Math.pow(1 - x, 3), out5: x => 1 - Math.pow(1 - x, 5), in: x => x * x * x,
+  io: x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2, sine: x => -(Math.cos(Math.PI * x) - 1) / 2,
+  back: x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+};
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function sizeOf(spec) { const m = String((spec && spec.size) || '1080x1920').match(/(\d+)\s*[x×X]\s*(\d+)/); return m ? [+m[1], +m[2]] : [1080, 1920]; }
+function setupStage(W, H) {
+  const st = document.getElementById('stage'); st.style.width = W + 'px'; st.style.height = H + 'px';
+  const fit = () => { if (window.__RENDERER__) return; const s = Math.min(innerWidth / W, innerHeight / H); st.style.transform = `translate(${(innerWidth - W * s) / 2}px, ${(innerHeight - H * s) / 2}px) scale(${s})`; };
+  fit(); addEventListener('resize', fit);
+}
+function autoplay() {
+  if (window.__RENDERER__) return;
+  const t0 = performance.now(); let busy = false;
+  const loop = async () => { if (!busy) { busy = true; const T = (window.DURATION || 6) + 1.2, t = ((performance.now() - t0) / 1000) % T; try { await window.render(Math.min(t, window.DURATION)); } catch (e) { console.error(e); } busy = false; } requestAnimationFrame(loop); };
+  loop();
+}
+async function loadFonts(list, ms = 6000) { try { await Promise.race([Promise.all(list.map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, ms))]); } catch (e) {} }
+function splitLines(text) { return String(text == null ? '' : text).split(/\n|\|/).map(s => s.trim()).filter(Boolean); }
+function wrap(g, text, maxW) {
+  const out = [];
+  for (const para of splitLines(text)) {
+    let line = '';
+    for (const w of para.split(/\s+/)) { const t2 = line ? line + ' ' + w : w; if (line && g.measureText(t2).width > maxW) { out.push(line); line = w; } else line = t2; }
+    if (line) out.push(line);
+  }
+  return out;
+}
+function balanced(g, text, maxW) {   // the same number of lines, as even as they can be ("How an idea / goes viral")
+  const base = wrap(g, text, maxW); if (base.length < 2) return base;
+  let lo = maxW * 0.3, hi = maxW;
+  for (let k = 0; k < 16; k++) { const mid = (lo + hi) / 2, L = wrap(g, text, mid);
+    if (L.length <= base.length && L.every(l => g.measureText(l).width <= mid + 0.5)) hi = mid; else lo = mid; }
+  return wrap(g, text, hi);
+}
+function fitText(g, text, o) {
+  const wt = o.weight || 800, min = o.min || o.size * 0.5, n = o.maxLines || 2;
+  for (let s = o.size; s >= min; s -= Math.max(1, o.size * 0.03)) {
+    g.font = `${wt} ${s}px ${o.family}`; const lines = wrap(g, text, o.maxW);
+    if (lines.length <= n && lines.every(l => g.measureText(l).width <= o.maxW)) return {lines: o.balance === false ? lines : balanced(g, text, o.maxW), size: s};
+  }
+  g.font = `${wt} ${min}px ${o.family}`; return {lines: wrap(g, text, o.maxW).slice(0, n), size: min};
+}
+</script>
+<script>
+const DEFAULT = {title: 'How an idea goes viral', pattern: 'spread', branches: 3, depth: 4, theme: 'coral'};
+const S = window.SPEC || DEFAULT;
+const [W, H] = sizeOf(S); setupStage(W, H);
+const cv = document.getElementById('c'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+const U = Math.min(W / 1080, H / 1350), P = H >= W * 1.2;
+const FONT = 'Inter, -apple-system, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const THEMES = {
+  coral: {bg: '#C95F3C', ink: '#FFFFFF', soft: 'rgba(255,255,255,0.30)', faint: 'rgba(255,255,255,0.16)', dot: '#2A1B4A', hi: '#FFE2B8'},
+  ink:   {bg: '#0E0E10', ink: '#FFFFFF', soft: 'rgba(255,255,255,0.28)', faint: 'rgba(255,255,255,0.13)', dot: '#FFD23F', hi: '#FFD23F'},
+  paper: {bg: '#F3EFE6', ink: '#151515', soft: 'rgba(21,21,21,0.24)', faint: 'rgba(21,21,21,0.11)', dot: '#FF5A36', hi: '#FF5A36'},
+  blue:  {bg: '#2340F5', ink: '#FFFFFF', soft: 'rgba(255,255,255,0.30)', faint: 'rgba(255,255,255,0.16)', dot: '#FFD23F', hi: '#FFD23F'},
+  mint:  {bg: '#BFE8D3', ink: '#0D2A1F', soft: 'rgba(13,42,31,0.24)', faint: 'rgba(13,42,31,0.11)', dot: '#FF6B3D', hi: '#FF6B3D'},
+};
+const TH = THEMES[S.theme] || THEMES.coral;
+const CX = W / 2, CY = P ? H * 0.585 : H * 0.6, R = Math.min(W * 0.42, P ? H * 0.215 : H * 0.30);
+const SPEED = clamp(Number(S.speed) || 1, 0.3, 2);   // 0.7 = everything 30% slower
+const MARGIN = 44 * U;
+let TT, LH, TY, SUBY;
+
+function ripple(x, y, r0, q, w = 2.5) { if (q <= 0 || q >= 1) return; g.beginPath(); g.arc(x, y, r0 * (1 + 2.2 * E.out(q)), 0, 2 * Math.PI); g.strokeStyle = alpha(TH.ink, 0.55 * (1 - q)); g.lineWidth = w * U; g.stroke(); }
+function alpha(col, a) {   // '#rrggbb' or rgba() -> rgba with alpha a
+  if (col.startsWith('#')) { const n = parseInt(col.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+  return col.replace(/rgba?\(([^,]+),([^,]+),([^,)]+)(,[^)]+)?\)/, `rgba($1,$2,$3,${a})`);
+}
+function shape(kind, x, y, r, fill) {
+  g.beginPath();
+  if (kind === 'square') g.roundRect(x - r * 0.88, y - r * 0.88, r * 1.76, r * 1.76, r * 0.28);
+  else if (kind === 'triangle') { for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + k * 2 * Math.PI / 3; k ? g.lineTo(x + r * 1.12 * Math.cos(a), y + 0.12 * r + r * 1.12 * Math.sin(a)) : g.moveTo(x + r * 1.12 * Math.cos(a), y + 0.12 * r + r * 1.12 * Math.sin(a)); } g.closePath(); }
+  else if (kind === 'diamond') { g.moveTo(x, y - r * 1.1); g.lineTo(x + r * 1.1, y); g.lineTo(x, y + r * 1.1); g.lineTo(x - r * 1.1, y); g.closePath(); }
+  else if (kind === 'hexagon') { for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; k ? g.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)) : g.moveTo(x + r * Math.cos(a), y + r * Math.sin(a)); } g.closePath(); }
+  else g.arc(x, y, r, 0, 2 * Math.PI);
+  g.fillStyle = fill; g.fill();
+}
+function textBlock(text, x, y, o) {   // wrapped text, its first baseline at y
+  const f = fitText(g, text, Object.assign({family: FONT, weight: 700, maxLines: 2}, o));
+  g.font = `${o.weight || 700} ${f.size}px ${FONT}`; g.textAlign = o.align || 'center'; g.textBaseline = 'alphabetic';
+  f.lines.forEach((l, i) => g.fillText(l, x, y + i * f.size * 1.15)); return f;
+}
+function trailDot(x0, y0, x1, y1, t, s, e, rad, col, ease = E.io) {   // a dot travelling s..e with a short trail
+  for (let k = 0; k < 5; k++) { const q = ease(prog(t - k * 0.018, s, e)); if (q <= 0 || (k === 0 && q >= 1)) continue;
+    g.beginPath(); g.arc(lerp(x0, x1, q), lerp(y0, y1, q), rad * (1 - k * 0.17), 0, 2 * Math.PI); g.fillStyle = k ? alpha(col, 0.45 - k * 0.08) : col; g.fill(); }
+}
+
+// ======================= patterns =======================
+const PATTERNS = {};
+
+// spread: one node reaches B, then B*B, ... (a radial tree lighting up ring by ring)
+PATTERNS.spread = () => {
+  const b = clamp(Math.round(S.branches || 3), 2, 4); let d = clamp(Math.round(S.depth || 4), 2, 5);
+  while (Math.pow(b, d) > 260) d--;
+  const radii = [0]; for (let k = 1; k <= d; k++) radii.push(R * Math.pow(k / d, 0.78));
+  const NR = k => U * [24, 17, 13, 10.5, 8, 6.5][k] * (b === 2 ? 1.25 : b === 4 ? 0.8 : 1) * (d <= 3 ? 1.25 : 1);
+  const gap = 2.4 / d + 0.18, WAVES = [null]; for (let k = 1; k <= d; k++) WAVES.push({s: 0.12 + (k - 1) * gap, d: 0.42 + 0.025 * k});
+  const nodes = [[{a: -Math.PI / 2, x: CX, y: CY, p: -1}]]; let off = 0;
+  for (let k = 1; k <= d; k++) { off -= Math.PI * (b - 1) / Math.pow(b, k); const n = Math.pow(b, k), ring = [];
+    for (let j = 0; j < n; j++) { const a = -Math.PI / 2 + 2 * Math.PI * j / n + off; ring.push({a, x: CX + radii[k] * Math.cos(a), y: CY + radii[k] * Math.sin(a), p: Math.floor(j / b)}); }
+    nodes.push(ring); }
+  const arrive = (k, j) => WAVES[k].s + WAVES[k].d + 0.10 * (j / nodes[k].length), leave = (k, j) => arrive(k, j) - WAVES[k].d;
+  const seq = (S.sequence || Array.from({length: d + 1}, (_, k) => String(Math.pow(b, k)))).map(String).slice(0, d + 1);
+  const END = WAVES[d].s + WAVES[d].d + 0.15;
+  return {END, sub: t => {   // the sequence under the title, one term per ring as it lights: 1 -> 3 -> 9 -> 27
+    const shown = seq.map((_, k) => k).filter(k => k === 0 || t >= WAVES[k].s + WAVES[k].d);
+    const parts = []; shown.forEach((k, i) => { if (i) parts.push({s: '  →  ', k: -1}); parts.push({s: seq[k], k}); });
+    let fs = 50 * U; g.letterSpacing = '-0.5px';
+    const allParts = []; seq.forEach((v, k) => { if (k) allParts.push('  \u2192  '); allParts.push(v); });
+    g.font = `600 ${fs}px ${FONT}`; const full = allParts.reduce((a, p) => a + g.measureText(p).width, 0); if (full > W * 0.9) fs *= W * 0.9 / full;   // the finished line must fit
+    g.font = `600 ${fs}px ${FONT}`;
+    const ws = parts.map(p => g.measureText(p.s).width), tot = ws.reduce((a, c) => a + c, 0); let x = W / 2 - tot / 2; const last = shown[shown.length - 1];
+    parts.forEach((p, i) => { let a = 1, dy = 0; if (p.k === last && p.k > 0) { const q2 = E.out(prog(t, WAVES[p.k].s + WAVES[p.k].d, WAVES[p.k].s + WAVES[p.k].d + 0.22)); a = q2; dy = (1 - q2) * 14 * U; }
+      g.save(); g.globalAlpha *= a; g.fillStyle = p.k === last ? TH.ink : alpha(TH.ink, 0.62); g.textAlign = 'left'; g.fillText(p.s, x, SUBY + dy); g.restore(); x += ws[i]; });
+    g.letterSpacing = '0px';
+  }, draw: t => {
+    for (let k = 1; k <= d; k++) { const q = E.out(prog(t, WAVES[k].s - 0.30, WAVES[k].s + 0.25)); if (q <= 0) continue;
+      g.beginPath(); g.arc(CX, CY, radii[k], -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * q); g.strokeStyle = TH.faint; g.lineWidth = 2 * U; g.stroke(); }
+    for (let k = 1; k <= d; k++) nodes[k].forEach((n, j) => {
+      const par = nodes[k - 1][n.p], s = leave(k, j), e = arrive(k, j); if (t < s) return;
+      const q = E.io(prog(t, s, e));
+      g.beginPath(); g.moveTo(par.x, par.y); g.lineTo(lerp(par.x, n.x, q), lerp(par.y, n.y, q));
+      g.strokeStyle = alpha(TH.ink, 0.80 - 0.10 * k); g.lineWidth = Math.max(1.2, 3.4 - 0.45 * k) * U; g.lineCap = 'round'; g.stroke();
+      trailDot(par.x, par.y, n.x, n.y, t, s, e, Math.max(3.5, 8.5 - 0.6 * k) * U, TH.dot);
+    });
+    for (let k = 0; k <= d; k++) nodes[k].forEach((n, j) => {
+      const at = k === 0 ? -1 : arrive(k, j);
+      const appear = k === 0 ? 1 : E.out(prog(t, WAVES[k].s - 0.35 - (k === 1 ? 0.3 : 0), WAVES[k].s + 0.05 + 0.25 * (j / nodes[k].length)));
+      if (appear <= 0) return;
+      const lit = t >= at; let r = NR(k) * appear;
+      if (lit && k) r *= 1 + 0.55 * Math.sin(Math.PI * clamp((t - at) / 0.26)) * (1 - clamp((t - at) / 0.26));
+      g.beginPath(); g.arc(n.x, n.y, r, 0, 2 * Math.PI); g.fillStyle = lit ? TH.ink : TH.soft; g.fill();
+      if (lit && k) ripple(n.x, n.y, NR(k), (t - at) / 0.55);
+    });
+    const pr = (t + 0.4) % 0.9 / 0.9; ripple(CX, CY, NR(0), pr, 3);
+    g.beginPath(); g.arc(CX, CY, NR(0), 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill();
+  }};
+};
+
+// flow: steps in order, joined by lines a dot travels along; then a steady stream of dots
+PATTERNS.flow = () => {
+  const steps = (S.steps && S.steps.length ? S.steps : ['Idea', 'Build', 'Launch', 'Grow']).slice(0, 6).map(String), n = steps.length;
+  const kinds = S.shapes || ['circle', 'square', 'triangle', 'diamond', 'hexagon', 'circle'];
+  const nr = 50 * U * (n > 5 ? 0.85 : 1);
+  const pos = steps.map((_, i) => P ? {x: W * 0.27, y: CY - R * 0.98 + (n === 1 ? R : 2 * R * 0.98 * i / (n - 1))}
+                                    : {x: W * 0.12 + (n === 1 ? W * 0.38 : W * 0.76 * i / (n - 1)), y: CY - 50 * U});
+  const hop = n > 1 ? clamp(2.8 / (n - 1), 0.5, 0.9) : 0.6, A = steps.map((_, i) => 0.3 + i * hop);
+  const END = A[n - 1] + 0.35;
+  return {END, draw: t => {
+    for (let i = 0; i < n - 1; i++) {   // connectors with the travelling dot
+      const a = pos[i], b = pos[i + 1], s = A[i] + 0.08, e = A[i + 1] - 0.02, q = E.io(prog(t, s, e)); if (q <= 0) continue;
+      const ux = (b.x - a.x), uy = (b.y - a.y), L = Math.hypot(ux, uy), ox = ux / L * nr * 1.25, oy = uy / L * nr * 1.25;
+      const x0 = a.x + ox, y0 = a.y + oy, x1 = b.x - ox, y1 = b.y - oy;
+      g.strokeStyle = alpha(TH.ink, 0.55); g.lineWidth = 4 * U; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(lerp(x0, x1, q), lerp(y0, y1, q)); g.stroke();
+      trailDot(x0, y0, x1, y1, t, s, e, 11 * U, TH.dot);
+    }
+    if (t > END - 0.2 && n > 1) {   // the steady stream once every step is lit
+      const f = E.out(prog(t, END - 0.2, END + 0.4));
+      for (let i = 0; i < n - 1; i++) { const a = pos[i], b = pos[i + 1], L = Math.hypot(b.x - a.x, b.y - a.y), ox = (b.x - a.x) / L * nr * 1.25, oy = (b.y - a.y) / L * nr * 1.25;
+        for (let k = 0; k < 3; k++) { const u = (((t - END) / (hop * 1.3) + k / 3) % 1 + 1) % 1;
+          g.globalAlpha = f * Math.sin(Math.PI * u); g.beginPath(); g.arc(lerp(a.x + ox, b.x - ox, u), lerp(a.y + oy, b.y - oy, u), 8 * U, 0, 2 * Math.PI); g.fillStyle = TH.dot; g.fill(); g.globalAlpha = 1; } }
+    }
+    steps.forEach((label, i) => {
+      const p = pos[i], q = prog(t, A[i] - 0.05, A[i] + 0.3); if (q <= 0) return;
+      const s = E.back(q); g.save(); g.translate(p.x, p.y); g.scale(s, s); shape(kinds[i % kinds.length], 0, 0, nr, TH.ink);
+      g.fillStyle = TH.bg; g.font = `800 ${nr * 0.78}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), 0, (kinds[i % kinds.length] === 'triangle' ? nr * 0.22 : 0) + 2 * U); g.restore();
+      ripple(p.x, p.y, nr, (t - A[i]) / 0.6);
+      const lq = E.out(prog(t, A[i] + 0.05, A[i] + 0.38)); if (lq <= 0) return;
+      g.save(); g.globalAlpha = lq; g.fillStyle = TH.ink;
+      if (P) { g.translate((1 - lq) * 24 * U, 0); const f = fitText(g, label, {maxW: W - (p.x + nr + 40 * U) - MARGIN, maxLines: 2, size: 56 * U, weight: 700, family: FONT});
+        g.font = `700 ${f.size}px ${FONT}`; g.textAlign = 'left'; g.textBaseline = 'middle'; const lh = f.size * 1.12;
+        f.lines.forEach((l, k) => g.fillText(l, p.x + nr + 40 * U, p.y + (k - (f.lines.length - 1) / 2) * lh)); }
+      else { g.translate(0, (1 - lq) * 18 * U); textBlock(label, p.x, p.y + nr + 70 * U, {maxW: W * 0.76 / Math.max(1, n - 1) * 0.92, size: 46 * U}); }
+      g.restore();
+    });
+  }};
+};
+
+// cycle: steps around a loop with a dot that keeps orbiting
+PATTERNS.cycle = () => {
+  const steps = (S.steps && S.steps.length ? S.steps : ['Evaporation', 'Clouds', 'Rain', 'Rivers']).slice(0, 6).map(String), n = steps.length;
+  const rc = R * 0.72, nr = 38 * U, A = steps.map((_, i) => -Math.PI / 2 + 2 * Math.PI * i / n);
+  const LOOP = clamp(0.62 * n, 2.0, 3.2), T0 = 0.6, END = T0 + LOOP;
+  const gapA = (nr + 18 * U) / rc;
+  const theta = t => -Math.PI / 2 + 2 * Math.PI * (t - T0) / LOOP;
+  return {END, draw: t => {
+    steps.forEach((_, i) => {   // the arcs, each ending in an arrowhead
+      const a0 = A[i] + gapA, a1 = A[i] + 2 * Math.PI / n - gapA, q = E.io(prog(t, 0.15 + i * 0.16, 0.6 + i * 0.16)); if (q <= 0) return;
+      const ae = lerp(a0, a1, q); g.strokeStyle = alpha(TH.ink, 0.5); g.lineWidth = 4 * U; g.lineCap = 'round';
+      g.beginPath(); g.arc(CX, CY, rc, a0, ae); g.stroke();
+      if (q > 0.85) { const hx = CX + rc * Math.cos(ae), hy = CY + rc * Math.sin(ae), dir = ae + Math.PI / 2, s = 18 * U;
+        g.fillStyle = alpha(TH.ink, 0.5 * clamp((q - 0.85) / 0.15)); g.beginPath(); g.moveTo(hx + s * Math.cos(dir), hy + s * Math.sin(dir));
+        g.lineTo(hx + s * Math.cos(dir + 2.5), hy + s * Math.sin(dir + 2.5)); g.lineTo(hx + s * Math.cos(dir - 2.5), hy + s * Math.sin(dir - 2.5)); g.closePath(); g.fill(); }
+    });
+    if (S.center) { const q = E.out(prog(t, 0.25, 0.7)); g.save(); g.globalAlpha = q; g.fillStyle = TH.ink;
+      const f = fitText(g, S.center, {maxW: rc * 1.35, maxLines: 2, size: 64 * U, weight: 800, family: FONT}); g.font = `800 ${f.size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      f.lines.forEach((l, k) => g.fillText(l, CX, CY + (k - (f.lines.length - 1) / 2) * f.size * 1.12)); g.restore(); }
+    steps.forEach((label, i) => {
+      const x = CX + rc * Math.cos(A[i]), y = CY + rc * Math.sin(A[i]), at = T0 + i * LOOP / n, lit = t >= at;
+      const app = E.out(prog(t, 0.1 + i * 0.12, 0.45 + i * 0.12)); if (app <= 0) return;
+      let r = nr * app; const since = ((t - at) % LOOP + LOOP) % LOOP;
+      if (lit && since < 0.3) r *= 1 + 0.35 * Math.sin(Math.PI * since / 0.3);
+      g.beginPath(); g.arc(x, y, r, 0, 2 * Math.PI); g.fillStyle = lit ? TH.ink : TH.soft; g.fill();
+      if (lit) ripple(x, y, nr, since / 0.6);
+      const lq = E.out(prog(t, 0.2 + i * 0.12, 0.6 + i * 0.12)); g.save(); g.globalAlpha = lq; g.fillStyle = TH.ink;
+      const top = Math.sin(A[i]) < -0.7, lw = Math.min(W * 0.34, W - 2 * MARGIN), lx = clamp(x, MARGIN + lw / 2, W - MARGIN - lw / 2);
+      const f = fitText(g, label, {maxW: lw, maxLines: 2, size: 48 * U, weight: 700, family: FONT}); g.font = `700 ${f.size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      const lh = f.size * 1.12, y0 = top ? y - nr - 26 * U - (f.lines.length - 1) * lh : y + nr + 26 * U + f.size * 0.8;
+      f.lines.forEach((l, k) => g.fillText(l, lx, y0 + k * lh)); g.restore();
+    });
+    if (t >= T0) for (let k = 0; k < 7; k++) { const th = theta(t - k * 0.03); g.beginPath(); g.arc(CX + rc * Math.cos(th), CY + rc * Math.sin(th), 15 * U * (1 - k * 0.12), 0, 2 * Math.PI);
+      g.fillStyle = k ? alpha(TH.dot, 0.5 - k * 0.06) : TH.dot; g.fill(); }
+  }};
+};
+
+// converge: many dots flow into one (or, with direction "out", one splits into many)
+PATTERNS.converge = () => {
+  const out = S.direction === 'out', srcs = (S.sources || []).slice(0, 6).map(String), r = rng(7);
+  const weights = srcs.map((_, i) => Number((S.weights || [])[i]) || 1), wsum = weights.reduce((a, c) => a + c, 0) || 1;
+  const count = clamp(Math.round(S.count || (srcs.length ? 36 : 44)), 8, 90), ring = srcs.length ? R * 0.95 : R * 1.08;
+  const SA = srcs.map((_, i) => -Math.PI / 2 + (i + 0.5) * 2 * Math.PI / srcs.length + (srcs.length === 2 ? Math.PI / 2 : 0));
+  const dots = []; let cum = 0;
+  for (let k = 0; k < count; k++) {
+    let a; if (srcs.length) { const u = (k + 0.5) / count * wsum; let i = 0; cum = 0; while (i < srcs.length - 1 && cum + weights[i] < u) { cum += weights[i]; i++; } a = SA[i] + (r() - 0.5) * 0.18; dots.push({src: i}); }
+    else { a = r() * 2 * Math.PI; dots.push({src: -1}); }
+    const d = dots[k]; d.a = a; d.s = 0.3 + 2.1 * (k / count) + r() * 0.25; d.dur = 0.85 + r() * 0.35; d.bend = (r() < 0.5 ? -1 : 1) * (0.18 + r() * 0.25);
+    d.x0 = CX + ring * Math.cos(a) * (srcs.length ? 1 : 0.9 + r() * 0.2); d.y0 = CY + ring * Math.sin(a) * (srcs.length ? 1 : 0.9 + r() * 0.2);
+  }
+  dots.sort((p, q) => (p.s + p.dur) - (q.s + q.dur));
+  const END = Math.max(...dots.map(d => d.s + d.dur)) + 0.1;
+  const pathAt = (d, q) => { const xa = out ? CX : d.x0, ya = out ? CY : d.y0, xb = out ? d.x0 : CX, yb = out ? d.y0 : CY;
+    const mx = (xa + xb) / 2 - (yb - ya) * d.bend, my = (ya + yb) / 2 + (xb - xa) * d.bend, u = 1 - q;
+    return [u * u * xa + 2 * u * q * mx + q * q * xb, u * u * ya + 2 * u * q * my + q * q * yb]; };
+  return {END, draw: t => {
+    const done = dots.filter(d => t >= d.s + d.dur).length, frac = done / count;
+    srcs.forEach((s, i) => {   // the sources (or destinations), each a small node with its label
+      const x = CX + ring * Math.cos(SA[i]), y = CY + ring * Math.sin(SA[i]), q = E.out(prog(t, 0.05 + i * 0.08, 0.4 + i * 0.08)); if (q <= 0) return;
+      const got = out ? dots.filter(d => d.src === i && t >= d.s + d.dur).length / Math.max(1, dots.filter(d => d.src === i).length) : 0;
+      g.beginPath(); g.arc(x, y, (20 + 18 * got) * U * q, 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill();
+      g.save(); g.globalAlpha = q; g.fillStyle = TH.ink; const below = Math.sin(SA[i]) > -0.2, lw = W * 0.34, lx = clamp(x, MARGIN + lw / 2, W - MARGIN - lw / 2);
+      const f = fitText(g, s, {maxW: lw, maxLines: 2, size: 44 * U, weight: 700, family: FONT}); g.font = `700 ${f.size}px ${FONT}`; g.textAlign = 'center';
+      const lh = f.size * 1.12, y0 = below ? y + 48 * U + f.size * 0.75 : y - 48 * U - (f.lines.length - 1) * lh; f.lines.forEach((l, k) => g.fillText(l, lx, y0 + k * lh)); g.restore();
+    });
+    dots.forEach(d => { if (t < d.s - 0.15) { if (!out && !srcs.length) { const q = E.out(prog(t, d.s - 0.6, d.s - 0.15)); if (q > 0) { g.globalAlpha = q * 0.7; g.beginPath(); g.arc(d.x0, d.y0, 7 * U, 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill(); g.globalAlpha = 1; } } return; }
+      if (t >= d.s + d.dur) return;
+      for (let k = 0; k < 5; k++) { const q = E.io(prog(t - k * 0.02, d.s, d.s + d.dur)); if (q <= 0) continue; const [x, y] = pathAt(d, q);
+        g.beginPath(); g.arc(x, y, 8 * U * (1 - k * 0.16), 0, 2 * Math.PI); g.fillStyle = k ? alpha(TH.dot, 0.45 - k * 0.08) : TH.dot; g.fill(); } });
+    const last = dots.filter(d => t >= d.s + d.dur).pop(), bump = last ? Math.max(0, 1 - (t - (last.s + last.dur)) / 0.18) : 0;
+    const cr = (out ? lerp(120, 70, frac) : lerp(36, 124, Math.sqrt(frac))) * U * (1 + 0.06 * bump) * E.out(prog(t, 0, 0.35));
+    g.beginPath(); g.arc(CX, CY, cr, 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill();
+    if (last) ripple(CX, CY, cr, (t - (last.s + last.dur)) / 0.5, 2);
+    if (S.center) { const q = out ? 1 : E.out(prog(t, END - 0.6, END)); if (q > 0) { g.save(); g.globalAlpha = q; g.fillStyle = TH.bg;
+      const f = fitText(g, S.center, {maxW: cr * 1.6, maxLines: 2, size: 46 * U, min: 18 * U, weight: 800, family: FONT}); g.font = `800 ${f.size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      f.lines.forEach((l, k) => g.fillText(l, CX, CY + (k - (f.lines.length - 1) / 2) * f.size * 1.1)); g.restore(); } }
+  }};
+};
+
+// compare: two or three amounts side by side, as dots (one per unit) or as circles sized by the amount
+PATTERNS.compare = () => {
+  const groups = (S.groups && S.groups.length ? S.groups : [{label: 'A can of soda', value: 39}, {label: 'An apple', value: 19}]).slice(0, 3)
+    .map(gr => ({label: String(gr.label || ''), value: Math.max(0, Number(gr.value) || 0), unit: gr.unit != null ? String(gr.unit) : (S.unit || '')}));
+  const n = groups.length, vmax = Math.max(1, ...groups.map(gr => gr.value)), units = groups.every(gr => Number.isInteger(gr.value)) && vmax <= 150;
+  const cw = (W - 2 * MARGIN) / n, xs = groups.map((_, i) => MARGIN + cw * (i + 0.5)), base = CY + R * 0.78, hl = typeof S.highlight === 'number' ? S.highlight : -1;
+  let END; const fmtN = v => Math.round(v).toLocaleString('en-US');
+  if (units) {
+    const cols = vmax <= 30 ? 5 : vmax <= 48 ? 6 : vmax <= 96 ? 8 : 10, rows = Math.ceil(vmax / cols);
+    const sp = Math.min(cw * 0.78 / cols, (R * 1.45) / rows), rate = vmax / 2.0;
+    END = 0.4 + (vmax - 1) / rate + 0.3;
+    return {END, draw: t => groups.forEach((gr, i) => {
+      const col = i === hl ? TH.dot : TH.ink, gx = xs[i] - (cols - 1) * sp / 2; let shown = 0;
+      for (let j = 0; j < gr.value; j++) { const at = 0.4 + j / rate, q = prog(t, at, at + 0.16); if (q <= 0) break; shown = j + 1;
+        const x = gx + (j % cols) * sp, y = base - Math.floor(j / cols) * sp - sp / 2; g.beginPath(); g.arc(x, y, sp * 0.36 * E.back(q), 0, 2 * Math.PI); g.fillStyle = col; g.fill(); }
+      const topY = base - Math.ceil(Math.max(gr.value, 1) / cols) * sp, q0 = E.out(prog(t, 0.2, 0.5));
+      g.save(); g.globalAlpha = q0; g.fillStyle = TH.ink; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      g.font = `800 ${72 * U}px ${FONT}`; g.fillText(fmtN(shown), xs[i], topY - 40 * U - (gr.unit ? 44 * U : 0));
+      if (gr.unit) { g.font = `600 ${38 * U}px ${FONT}`; g.fillStyle = alpha(TH.ink, 0.72); g.fillText(gr.unit, xs[i], topY - 34 * U); }
+      g.fillStyle = TH.ink; textBlock(gr.label, xs[i], base + 70 * U, {maxW: cw * 0.9, size: 48 * U}); g.restore();
+    })};
+  }
+  const Rmax = Math.min(cw * 0.44, R * 0.62), dec = groups.some(gr => !Number.isInteger(gr.value)) ? 1 : 0;
+  END = 0.4 + (n - 1) * 0.35 + 0.9;
+  return {END, draw: t => groups.forEach((gr, i) => {
+    const r = Rmax * Math.sqrt(gr.value / vmax), at = 0.4 + i * 0.35, q = prog(t, at, at + 0.9), cyc = base - Rmax, col = i === hl ? TH.dot : TH.ink;
+    if (q > 0) { g.beginPath(); g.arc(xs[i], cyc + (Rmax - r), Math.max(0, r * E.back(Math.min(1, q * 1.25))), 0, 2 * Math.PI); g.fillStyle = col; g.fill(); }
+    const v = gr.value * E.out(q), txt = (S.prefix || '') + (dec ? v.toFixed(1) : fmtN(v)) + (gr.unit ? ' ' + gr.unit : ''), q0 = E.out(prog(t, 0.2, 0.5));
+    g.save(); g.globalAlpha = q0; g.fillStyle = TH.ink; g.textAlign = 'center'; g.font = `800 ${64 * U}px ${FONT}`;
+    g.fillText(txt, xs[i], cyc - Rmax - 30 * U + (Rmax - r) * 0.0); textBlock(gr.label, xs[i], base + 70 * U, {maxW: cw * 0.9, size: 48 * U}); g.restore();
+  })};
+};
+
+// ======================= the frame =======================
+const PAT = (PATTERNS[S.pattern] || PATTERNS.spread)();
+window.DURATION = Number(S.duration) || Math.max(5, PAT.END + (S.takeaway ? 2.9 : 1.6)) / SPEED;
+function layout() {
+  g.letterSpacing = '-2px';
+  TT = fitText(g, S.title || '', {maxW: W * 0.88, maxLines: 2, size: 96 * U, weight: 800, family: FONT});
+  g.letterSpacing = '0px';
+  LH = TT.size * 1.1; TY = (P ? H * 0.156 : H * 0.11) + (TT.lines.length < 2 ? LH * 0.3 : 0); SUBY = TY + (TT.lines.length - 1) * LH + 88 * U;
+}
+function titles(t) {
+  const q = E.out5(prog(t, -0.25, 0.30));
+  g.save(); g.globalAlpha = q; g.translate(0, (1 - q) * 26 * U); g.fillStyle = TH.ink; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = `800 ${TT.size}px ${FONT}`; g.letterSpacing = '-2px'; TT.lines.forEach((l, i) => g.fillText(l, W / 2, TY + i * LH)); g.letterSpacing = '0px';
+  let line = 0;
+  if (PAT.sub) { PAT.sub(t); line++; }
+  if (S.subtitle) { g.font = `600 ${46 * U}px ${FONT}`; g.fillStyle = alpha(TH.ink, 0.8); g.fillText(String(S.subtitle), W / 2, SUBY + line * 64 * U); line++; }
+  g.restore();
+  if (S.takeaway) { const a = E.out(prog(t, PAT.END + 0.05, PAT.END + 0.45)); if (a > 0) { g.save(); g.globalAlpha = a; g.translate(0, (1 - a) * 18 * U); g.fillStyle = TH.ink;
+    textBlock(S.takeaway, W / 2, SUBY + line * 66 * U + (line ? 8 : 0) * U, {maxW: W * 0.86, size: 54 * U, weight: 800}); g.restore(); } }
+}
+function draw(t) {
+  g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+  const zoom = 0.94 + 0.06 * E.sine(prog(t, 0, Math.min(3.8, window.DURATION))), spin = S.pattern === 'spread' || !S.pattern ? 0.10 * E.sine(prog(t, PAT.END, PAT.END + 1.6)) + 0.012 * t : 0;
+  g.save(); g.translate(CX, CY); g.rotate(spin); g.scale(zoom, zoom); g.translate(-CX, -CY);
+  PAT.draw(t);
+  g.restore();
+  titles(t);
+}
+window.render = t => { draw(t * SPEED); return true; };
+loadFonts([`800 96px Inter`, `700 48px Inter`, `600 50px Inter`]).then(() => { layout(); draw(0); window.ready = true; autoplay(); });
+</script>
+</body>
+</html>

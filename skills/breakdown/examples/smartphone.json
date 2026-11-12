@@ -1,0 +1,20 @@
+{
+  "title": "Inside a smartphone",
+  "theme": "dark",
+  "parts": [
+    {"name": "Cover glass", "shape": "slab", "size": [72, 0.7, 150], "radius": 10.5, "material": "glass", "y": 0, "level": 0},
+    {"name": "Display", "shape": "slab", "size": [69, 0.7, 147], "radius": 9, "material": "black", "color": "#232428", "y": 0.8, "level": 1},
+    {"name": "Display shield", "label": false, "shape": "slab", "size": [56, 0.12, 110], "radius": 4, "material": "copper", "pos": [0, 1.55, 6], "level": 1},
+    {"name": "Frame", "shape": "frame", "size": [72, 7.4, 150], "radius": 10.5, "wall": 2.5, "material": "aluminum", "y": 0.9, "level": 2},
+    {"name": "Buttons", "label": false, "shape": "box", "size": [1.4, 2.4, 14], "material": "aluminum", "copies": [[36.9, -30], [-36.9, -38], [-36.9, -22]], "y": 3.0, "level": 2},
+    {"name": "Battery", "shape": "slab", "size": [62, 4, 86], "radius": 5, "material": "battery", "text": "Li-ion|Rechargeable battery|3.88 V  ·  5,000 mAh", "pos": [0, 2.0, 24], "level": 3},
+    {"name": "Logic board", "shape": "slab", "size": [62, 1, 44], "radius": 4, "material": "pcb", "pos": [0, 2.0, -48], "level": 3},
+    {"name": "Main chip", "shape": "box", "size": [15, 1.4, 15], "material": "chip", "pos": [-14, 3.0, -48], "level": 3},
+    {"name": "Chip lid", "label": false, "shape": "box", "size": [11, 0.25, 11], "material": "gold", "pos": [-14, 4.4, -48], "level": 3},
+    {"name": "Charging coil", "shape": "disc", "radius": 24, "size": [48, 0.6, 48], "material": "coil", "pos": [0, 7.1, 24], "level": 4},
+    {"name": "Coil sheet", "label": false, "shape": "slab", "size": [52, 0.5, 58], "radius": 6, "material": "black", "pos": [0, 6.6, 24], "level": 4},
+    {"name": "Cameras", "shape": "lens", "radius": 4.6, "size": [9.2, 4.2, 9.2], "copies": [[-23.2, -62.2], [-23.2, -45.5], [-8, -53.8]], "y": 6.6, "level": 4},
+    {"name": "Back glass", "shape": "slab", "size": [72, 0.9, 150], "radius": 10.5, "material": "glass-tint", "color": "#3d5571", "y": 8.4, "level": 5},
+    {"name": "Camera bump", "label": false, "shape": "slab", "size": [36, 1.1, 36], "radius": 8.5, "material": "glass-tint", "color": "#34495f", "pos": [-15.6, 9.3, -53.8], "level": 5}
+  ]
+}

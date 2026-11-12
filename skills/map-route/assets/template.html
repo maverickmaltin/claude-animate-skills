@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>/map-route animation</title>
+<!--
+  The /map-route skill's animation: a real 3D map with the route drawing itself between two places.
+  MapLibre GL 5.20.1 with OpenFreeMap's vector tiles (OpenStreetMap data, no key). Walks, bike rides and short drives get
+  a tilted street-level camera that follows the route while the buildings rise in 3D; longer drives get a tilted overview;
+  flights are drawn as a great-circle arc on a globe with a plane at its head. The route itself comes from
+  scripts/route.py (OSRM on OpenStreetMap roads and paths). scripts/render.py inlines the spec where it says SPEC below and
+  records the page frame by frame, waiting for every tile; opened on its own, the page plays in a loop.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&display=block" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.js"></script>
+<style>
+html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+#stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#map { position: absolute; left: 0; top: 0; }
+.maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display: none !important; }
+#vig { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; pointer-events: none; }
+#attr { position: absolute; z-index: 9; color: rgba(255,255,255,0.75); text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.pin { position: absolute; z-index: 5; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; opacity: 0; }
+.pin .lab { background: #fff; color: #15171c; font-weight: 700; white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05); }
+.pin .dot { border-radius: 50%; border-style: solid; border-color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+#head { position: absolute; z-index: 6; display: none; }
+#card { position: absolute; z-index: 8; background: rgba(255,255,255,0.94); box-shadow: 0 18px 50px rgba(20,30,50,0.18), 0 0 0 1px rgba(0,0,0,0.04); opacity: 0; }
+#card .r { font-weight: 800; color: #121418; }
+#card .r span { color: #0A84FF; }
+#card .s { font-weight: 600; color: #5b606b; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="map"></div>
+  <div id="card"><div class="r" id="ttl"></div><div class="s" id="sub"></div></div>
+  <div class="pin" id="pinA"><div class="lab" id="labA"></div><div class="dot" style="background:#0A84FF"></div></div>
+  <div class="pin" id="pinB"><div class="lab" id="labB"></div><div class="dot" style="background:#FF3B30"></div></div>
+  <div id="head"></div>
+  <div id="vig"></div>
+  <div id="attr">&copy; OpenFreeMap &middot; &copy; OpenMapTiles &middot; &copy; OpenStreetMap contributors</div>
+</div>
+<script>
+/* ---- animate-skills kit: timing, easing and playback (the same in every template) ---- */
+window.SPEC = /*SPEC*/null;
+addEventListener('error', e => { if (!window.ready) window.renderError = String(e.message || e); });
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, q) => a + (b - a) * q;
+const prog = (t, t0, t1) => clamp((t - t0) / Math.max(1e-6, t1 - t0));
+const E = {
+  lin: x => x, out: x => 1 - Math.pow(1 - x, 3), out5: x => 1 - Math.pow(1 - x, 5), in: x => x * x * x,
+  io: x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2, sine: x => -(Math.cos(Math.PI * x) - 1) / 2,
+  back: x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
+};
+function sizeOf(spec) { const m = String((spec && spec.size) || '1080x1920').match(/(\d+)\s*[x×X]\s*(\d+)/); return m ? [+m[1], +m[2]] : [1080, 1920]; }
+function setupStage(W, H) {
+  const st = document.getElementById('stage'); st.style.width = W + 'px'; st.style.height = H + 'px';
+  const fit = () => { if (window.__RENDERER__) return; const s = Math.min(innerWidth / W, innerHeight / H); st.style.transform = `translate(${(innerWidth - W * s) / 2}px, ${(innerHeight - H * s) / 2}px) scale(${s})`; };
+  fit(); addEventListener('resize', fit);
+}
+function autoplay() {
+  if (window.__RENDERER__) return;
+  const t0 = performance.now(); let busy = false;
+  const loop = async () => { if (!busy) { busy = true; const T = (window.DURATION || 6) + 1.2, t = ((performance.now() - t0) / 1000) % T; try { await window.render(Math.min(t, window.DURATION)); } catch (e) { console.error(e); } busy = false; } requestAnimationFrame(loop); };
+  loop();
+}
+async function loadFonts(list, ms = 6000) { try { await Promise.race([Promise.all(list.map(f => document.fonts.load(f))), new Promise(r => setTimeout(r, ms))]); } catch (e) {} }
+</script>
+<script>
+const DEFAULT = {mode: 'walk', units: 'imperial', from: {name: 'Times Square', lon: -73.985525, lat: 40.757976}, to: {name: 'Empire State Building', lon: -73.985683, lat: 40.748441},
+  distance_m: 1230, duration_s: 986};
+const S = window.SPEC || DEFAULT;
+const [W, H] = sizeOf(S); setupStage(W, H);
+const U = Math.min(W / 1080, H / 1350), P = H >= W * 1.2, $ = id => document.getElementById(id);
+const A = S.from, B = S.to, MODE = S.mode || 'walk';
+let C = (S.route && S.route.length > 1 ? S.route : [[A.lon, A.lat], [B.lon, B.lat]]).map(p => [Number(p[0]), Number(p[1])]);
+const R = 6371000, rad = Math.PI / 180;
+const dist = (a, b) => { const x = (b[0] - a[0]) * rad * Math.cos((a[1] + b[1]) / 2 * rad), y = (b[1] - a[1]) * rad; return R * Math.hypot(x, y); };
+const cum = [0]; for (let i = 1; i < C.length; i++) cum.push(cum[i - 1] + dist(C[i - 1], C[i]));
+const TOT = cum[cum.length - 1] || 1;
+function partial(p) { const d = p * TOT, out = [C[0]]; let i = 1; for (; i < C.length && cum[i] <= d; i++) out.push(C[i]);
+  if (i < C.length) { const q = (d - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]); out.push([lerp(C[i - 1][0], C[i][0], q), lerp(C[i - 1][1], C[i][1], q)]); } return out; }
+const pointAt = p => { const pl = partial(clamp(p)); return pl[pl.length - 1]; };
+const azimuth = (a, b) => { const la1 = a[1] * rad, la2 = b[1] * rad, dl = (b[0] - a[0]) * rad; return (Math.atan2(Math.sin(dl) * Math.cos(la2), Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dl)) / rad + 360) % 360; };
+const AZ = azimuth(C[0], C[C.length - 1]);
+const SHORT = MODE === 'walk' || MODE === 'bike' || (MODE === 'drive' && (S.distance_m || TOT) < 8000);
+const FLY = MODE === 'fly', DARK = S.style === 'dark';
+// a longer duration slows the whole move down (the route draws over ~55% of it), not just the hold at the end
+const T_RISE0 = 0.05, T_RISE1 = 0.75, T_DRAW0 = 0.42, T_DRAW1 = Number(S.duration) ? Math.max(1.6, Number(S.duration) * 0.55) : (SHORT ? 2.0 : 2.5);
+window.DURATION = Number(S.duration) || Math.max(4.5, T_DRAW1 + 1.8);
+
+// ---------------- the words on screen ----------------
+function fmtDist(m) { if (S.units === 'imperial') { const mi = m / 1609.344; if (mi < 0.1) return Math.round(m * 3.28084 / 10) * 10 + ' ft'; return (mi < 10 ? mi.toFixed(1) : Math.round(mi).toLocaleString('en-US')) + ' mi'; }
+  if (m < 1000) return Math.round(m / 10) * 10 + ' m'; const km = m / 1000; return (km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString('en-US')) + ' km'; }
+function fmtDur(s) { const mn = Math.max(1, Math.round(s / 60)); if (mn < 60) return mn + ' min'; const h = Math.floor(mn / 60), r = mn % 60; return h + ' h' + (r ? ' ' + r + ' min' : ''); }
+const WORD = {walk: 'walk', bike: 'bike ride', drive: 'drive', fly: 'flight'}[MODE] || MODE;
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c])); }
+function dressDom() {
+  $('map').style.width = W + 'px'; $('map').style.height = H + 'px';
+  const card = $('card'); Object.assign(card.style, {left: 60 * U + 'px', right: 60 * U + 'px', top: (P ? H * 0.115 : H * 0.06) + 'px', borderRadius: 44 * U + 'px', padding: `${34 * U}px ${44 * U}px ${30 * U}px`});
+  $('ttl').style.fontSize = 58 * U + 'px'; $('ttl').style.letterSpacing = -1.4 * U + 'px'; $('ttl').style.lineHeight = 1.12;
+  $('ttl').innerHTML = S.title ? esc(S.title) : `${esc(A.name)} <span>&rarr;</span>${(A.name + B.name).length > 22 ? '<br>' : ' '}${esc(B.name)}`;
+  $('sub').style.fontSize = 40 * U + 'px'; $('sub').style.marginTop = 12 * U + 'px';
+  $('sub').textContent = S.subtitle || `${fmtDist(S.distance_m || TOT)} · ${fmtDur(S.duration_s || TOT / 1.3)} ${WORD}`;
+  for (const [id, lab, name] of [['pinA', 'labA', A.name], ['pinB', 'labB', B.name]]) { const l = $(lab); l.textContent = name;
+    Object.assign(l.style, {fontSize: 40 * U + 'px', padding: `${12 * U}px ${24 * U}px`, borderRadius: 40 * U + 'px', marginBottom: 14 * U + 'px', letterSpacing: -0.4 * U + 'px'});
+    const d = $(id).querySelector('.dot'); Object.assign(d.style, {width: 34 * U + 'px', height: 34 * U + 'px', borderWidth: 7 * U + 'px'}); }
+  const hd = $('head'); if (FLY) { hd.innerHTML = `<svg viewBox="0 0 24 24" width="${64 * U}" height="${64 * U}"><path fill="#fff" stroke="#0A84FF" stroke-width="1.2" stroke-linejoin="round" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`;
+    Object.assign(hd.style, {width: 64 * U + 'px', height: 64 * U + 'px', margin: `${-32 * U}px 0 0 ${-32 * U}px`, filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.35))'}); }
+  else Object.assign(hd.style, {width: 40 * U + 'px', height: 40 * U + 'px', margin: `${-20 * U}px 0 0 ${-20 * U}px`, borderRadius: '50%', background: '#fff', boxShadow: `0 0 0 ${9 * U}px rgba(10,132,255,0.35), 0 2px 8px rgba(0,0,0,0.3)`});
+  if (!FLY) hd.innerHTML = `<i style="position:absolute;inset:${8 * U}px;border-radius:50%;background:#0A84FF"></i>`;
+  $('vig').style.height = H * 0.4 + 'px';
+  $('vig').style.background = DARK || FLY ? 'linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.35))' : 'linear-gradient(to bottom, rgba(18,24,36,0) 0%, rgba(18,24,36,0.36) 45%, rgba(18,24,36,0.52) 100%)';
+  Object.assign($('attr').style, {right: 18 * U + 'px', bottom: 14 * U + 'px', fontSize: 18 * U + 'px'});
+  if (FLY) document.getElementById('stage').style.background = 'radial-gradient(ellipse at 50% 55%, #1b2a4a 0%, #070b16 70%)';
+}
+
+// ---------------- the map ----------------
+let map, CAM;
+async function buildMap() {
+  const sty = DARK ? 'dark' : S.style === 'color' ? 'liberty' : 'positron';
+  const style = await (await fetch('https://tiles.openfreemap.org/styles/' + sty)).json();
+  style.layers = style.layers.filter(l => l.type !== 'symbol');          // no map labels: the two pins carry the names
+  if (sty === 'positron') for (const l of style.layers) {
+    if (l.id === 'background') l.paint = {'background-color': '#eceeef'};
+    if (l.id === 'water') l.paint = {'fill-color': '#b9d8ee'};
+    if (l.id === 'park') l.paint = {'fill-color': '#d6ecd2'};
+    if (l.id === 'building') l.paint = {'fill-color': '#e2e4e7'};
+  }
+  if (sty === 'dark') for (const l of style.layers) {        // a little more contrast between land and water
+    if (l.id === 'background') l.paint = {'background-color': '#222a38'};
+    if (l.id === 'water') l.paint = {'fill-color': '#0b1528'};
+  }
+  style.transition = {duration: 0, delay: 0};
+  if (FLY) style.projection = {type: 'globe'};
+  map = new maplibregl.Map({container: 'map', style, center: C[0], zoom: 3, interactive: false, attributionControl: false, fadeDuration: 0,
+    canvasContextAttributes: {preserveDrawingBuffer: true, antialias: true}, preserveDrawingBuffer: true, antialias: true, maxPitch: 75});
+  await new Promise((res, rej) => { map.on('load', res); map.on('error', e => { if (!map.loaded()) rej(e.error || e); }); });
+  if (SHORT) {
+    map.setLight({anchor: 'map', color: '#ffffff', intensity: 0.30, position: [1.3, 235, 40]});
+    map.addLayer({id: 'b3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 12,
+      paint: {'fill-extrusion-color': DARK ? ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10], 0, '#2b303b', 300, '#3a4150']
+                                           : ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10], 0, '#ffffff', 150, '#f6f8fb', 400, '#e9eef6'],
+              'fill-extrusion-height': ['*', ['coalesce', ['get', 'render_height'], 10], 0.1], 'fill-extrusion-base': ['*', ['coalesce', ['get', 'render_min_height'], 0], 0.1],
+              'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true}});
+  }
+  map.addSource('route', {type: 'geojson', data: {type: 'Feature', geometry: {type: 'LineString', coordinates: [C[0], C[0]]}}});
+  const lineCol = S.color || (DARK ? '#4CC2FF' : '#0A84FF');
+  map.addLayer({id: 'route-case', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {'line-color': '#ffffff', 'line-width': (FLY ? 16 : 30) * U, 'line-opacity': FLY ? 0.7 : 1}});
+  map.addLayer({id: 'route', type: 'line', source: 'route', layout: {'line-cap': 'round', 'line-join': 'round'}, paint: {'line-color': lineCol, 'line-width': (FLY ? 9 : 19) * U}});
+  // camera keyframes for this route
+  const b = C.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(C[0], C[0]));
+  const pad = {top: H * (P ? 0.30 : 0.26), bottom: H * (P ? 0.22 : 0.12), left: W * 0.12, right: W * 0.12};
+  const fit = map.cameraForBounds(b, {padding: pad, bearing: SHORT ? AZ : 0}) || {center: map.getCenter(), zoom: 12};
+  const z = Math.min(fit.zoom, 17.2), ctr = maplibregl.LngLat.convert(fit.center);
+  if (SHORT) CAM = {c0: () => pointAt(0.30), c1: () => pointAt(0.66), z0: z + 0.55, z1: z + 0.75, p0: 52, p1: 63, b0: AZ - 6, b1: AZ + 12};
+  else if (FLY) CAM = {c0: () => [lerp(C[0][0], ctr.lng, 0.35), lerp(C[0][1], ctr.lat, 0.35)], c1: () => [ctr.lng, ctr.lat], z0: Math.min(z + 0.35, 5.2), z1: Math.min(z, 5), p0: 18, p1: 30, b0: -4, b1: 4};
+  else CAM = {c0: () => [ctr.lng, ctr.lat], c1: () => [ctr.lng, ctr.lat], z0: z + 0.2, z1: z, p0: 26, p1: 38, b0: -6, b1: 6};
+  // the end of the move must show the whole route with both pins in the clear part of the frame: zoom out until it does
+  const top = $('card').offsetTop + $('card').offsetHeight + 150 * U, safe = [W * 0.08, top, W * 0.92, H * (P ? 0.80 : 0.90)];
+  for (let k = 0; k < 4; k++) {
+    map.jumpTo({center: CAM.c1(), zoom: CAM.z1, pitch: CAM.p1, bearing: CAM.b1});
+    let f = 1; const cx = W / 2, cy = H / 2;
+    for (let i = 0; i <= 80; i++) { const p = map.project(pointAt(i / 80));
+      const hw = i === 0 ? $('labA').offsetWidth / 2 : i === 80 ? $('labB').offsetWidth / 2 : 0;   // a pin's label is centred on its point
+      const l0 = hw ? Math.max(safe[0], W * 0.03 + hw) : safe[0], r0 = hw ? Math.min(safe[2], W * 0.97 - hw) : safe[2];
+      if (p.x < l0) f = Math.min(f, (cx - l0) / Math.max(1, cx - p.x)); if (p.x > r0) f = Math.min(f, (r0 - cx) / Math.max(1, p.x - cx));
+      if (p.y < safe[1]) f = Math.min(f, (cy - safe[1]) / Math.max(1, cy - p.y)); if (p.y > safe[3]) f = Math.min(f, (safe[3] - cy) / Math.max(1, p.y - cy)); }
+    if (f >= 0.995) break;
+    const dz = Math.log2(Math.max(0.05, f)) - 0.04; CAM.z1 += dz; if (!SHORT) CAM.z0 = Math.min(CAM.z0, CAM.z1 + 0.25);
+  }
+}
+let lastH = -1;
+function idle() { return Promise.race([new Promise(r => { map.once('idle', r); map.triggerRepaint(); }), new Promise(r => setTimeout(r, 5000))]); }
+function place(el, ll, a, anchorBottom = true) { const p = map.project(ll); el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; el.style.opacity = a;
+  el.style.transform = `translate(-50%, ${anchorBottom ? '-100%' : '-50%'}) scale(${0.6 + 0.4 * E.back(clamp(a))})`; }
+window.render = async t => {
+  const q = E.sine(prog(t, 0, T_DRAW1 + 0.8)), c0 = CAM.c0(), c1 = CAM.c1();
+  map.jumpTo({center: [lerp(c0[0], c1[0], q), lerp(c0[1], c1[1], q)], zoom: lerp(CAM.z0, CAM.z1, q), pitch: lerp(CAM.p0, CAM.p1, q), bearing: lerp(CAM.b0, CAM.b1, q)});
+  if (SHORT) { const h = 0.08 + 0.92 * E.out(prog(t, T_RISE0, T_RISE1)); if (Math.abs(h - lastH) > 1e-4) { lastH = h;
+    map.setPaintProperty('b3d', 'fill-extrusion-height', ['*', ['coalesce', ['get', 'render_height'], 10], h]);
+    map.setPaintProperty('b3d', 'fill-extrusion-base', ['*', ['coalesce', ['get', 'render_min_height'], 0], h]); } }
+  const dp = E.io(prog(t, T_DRAW0, T_DRAW1)), pl = partial(Math.max(0.0005, dp));
+  map.getSource('route').setData({type: 'Feature', geometry: {type: 'LineString', coordinates: pl.length > 1 ? pl : [C[0], C[0]]}});
+  await idle();
+  place($('pinA'), C[0], E.out(prog(t, 0.05, 0.35)));
+  place($('pinB'), C[C.length - 1], E.out(prog(t, T_DRAW1 - 0.06, T_DRAW1 + 0.22)));
+  const hd = $('head');
+  if (dp > 0 && dp < 1) { const hp = pl[pl.length - 1], p = map.project(hp); hd.style.display = 'block'; hd.style.left = p.x + 'px'; hd.style.top = p.y + 'px';
+    if (FLY) { const bp = map.project(partial(Math.max(0, dp - 0.01)).pop()), ang = Math.atan2(p.y - bp.y, p.x - bp.x) * 180 / Math.PI + 90; hd.style.transform = `rotate(${ang}deg)`; } }
+  else hd.style.display = 'none';
+  const cq = E.out(prog(t, -0.2, 0.3)); $('card').style.opacity = cq; $('card').style.transform = `translateY(${(1 - cq) * -20 * U}px)`;
+  return true;
+};
+(async () => {
+  dressDom();
+  await loadFonts(['800 58px Inter', '700 40px Inter', '600 40px Inter']);
+  await buildMap();
+  await window.render(0);
+  window.ready = true; autoplay();
+})().catch(e => { window.renderError = 'map could not load: ' + (e && e.message || e); console.error(e); });
+</script>
+</body>
+</html>
