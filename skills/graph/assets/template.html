@@ -98,7 +98,10 @@ let DATA = (Array.isArray(S.data) ? S.data : []).map(d => Array.isArray(d) ? {la
   : {label: String(d.label != null ? d.label : (d.x != null ? d.x : '')), value: Number(d.value != null ? d.value : d.y)}).filter(d => isFinite(d.value));
 if (!DATA.length) DATA = DEFAULT.data.map(d => ({label: d[0], value: d[1]}));
 const N = DATA.length, VALS = DATA.map(d => d.value);
-const TYPE = S.type === 'line' ? 'line' : S.type === 'bar' ? 'bar' : (N > 10 ? 'line' : 'bar');
+// auto: bars up to 10 values; a line for longer series, and for values that change little next to their size
+// (weight, prices, temperatures), where bars from zero would all look the same height
+const V0 = Math.min(...VALS), V1 = Math.max(...VALS);
+const TYPE = S.type === 'line' ? 'line' : S.type === 'bar' ? 'bar' : (N > 10 || (N >= 3 && V0 > 0 && (V1 - V0) < 0.3 * V1) ? 'line' : 'bar');
 const HI = (S.highlight === 'none' || S.highlight === false) ? -1 : typeof S.highlight === 'number' ? S.highlight
   : S.highlight === 'max' ? VALS.indexOf(Math.max(...VALS)) : N - 1;
 const decOf = v => { const s = String(v), i = s.indexOf('.'); return i < 0 || /e/i.test(s) ? 0 : Math.min(2, s.length - i - 1); };
@@ -149,6 +152,7 @@ if (CALL === undefined || CALL === 'auto') {
     CALL = r >= 2 ? '↑ ' + (r >= 10 ? Math.round(r) : r.toFixed(1).replace(/\.0$/, '')) + 'x' : r >= 1.005 ? '↑ ' + Math.round((r - 1) * 100) + '%' : r <= 0.995 ? '↓ ' + Math.round((1 - r) * 100) + '%' : null; }
 }
 const CALL_UP = CALL ? !/^\s*[↓\-−]/.test(CALL) : true;
+const CALL_GOOD = S.good === 'down' ? !CALL_UP : CALL_UP;   // "good": "down" when lower is better (weight, debt, costs)
 
 // ---------- drawing ----------
 function background() {
@@ -193,7 +197,7 @@ function bars(t) {
     g.fillStyle = neg ? grad(cb, ca, y0, yOf(d.value)) : grad(ca, cb, yOf(d.value), y0);
     g.beginPath(); g.roundRect(x, top, BW, h, neg ? [0, 0, r, r] : [r, r, 0, 0]); g.fill();
     if (isHi) { g.save(); g.shadowColor = TH.hiGlow; g.shadowBlur = 50 * U; g.fill(); g.restore(); }
-    const dec = decOf(d.value), fs = labelSize(fmt(d.value, false, dec), BW * 1.3 + GAPW * 0.6, (isHi ? 76 : 58) * U * (N > 6 ? 0.78 : 1), 22 * U);
+    const dec = decOf(d.value), fs = labelSize(fmt(d.value, false, dec), BW + GAPW * 0.8, (isHi ? 76 : 58) * U * (N > 6 ? 0.78 : 1), 22 * U);   // stays inside its own slot
     g.font = `800 ${fs}px ${FONT}`; g.textAlign = 'center'; const ly = neg ? yt + fs + 14 * U : yt - 26 * U;
     g.lineJoin = 'round'; g.lineWidth = 14 * U; g.strokeStyle = TH.bg; g.strokeText(fmt(v, false, dec), x + BW / 2, ly);   // gridlines stop short of the number
     g.fillStyle = TH.ink; g.fillText(fmt(v, false, dec), x + BW / 2, ly);
@@ -232,7 +236,7 @@ function line(t) {
 function callout(t) {
   if (!CALL) return;
   const tq = prog(t, END + 0.2, END + 0.55); if (tq <= 0) return;
-  const s = 0.5 + 0.5 * E.back(tq), col = CALL_UP ? UP : DOWN, fs = 58 * U;
+  const s = 0.5 + 0.5 * E.back(tq), col = CALL_GOOD ? UP : DOWN, fs = 58 * U;
   g.font = `800 ${fs}px ${FONT}`; const tw = g.measureText(CALL).width, pw = tw + 84 * U, ph = 104 * U;
   let x, y;
   if (TYPE === 'bar' && N >= 2) {

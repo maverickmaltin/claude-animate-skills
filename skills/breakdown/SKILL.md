@@ -36,6 +36,9 @@ No browser possible here (for example the Claude app's sandbox)? See the end of 
 - Its real main parts, in assembly order from one side to the other: 5-9 parts worth labelling (cover, screen, frame,
   battery, board, chip, speaker, driver, cushion...). Use what this kind of product really contains; if unsure about a
   specific model, use the parts its category always has, and don't make up exotic ones.
+- The kit builds products from simple shapes, so it shines on things made of layers and hard parts (phones, keyboards,
+  headphones, speakers, controllers, watches, cameras, appliances). Soft, organic products (shoes, clothes, food) come
+  out toy-like: say so if the user asks for one.
 - Real approximate sizes in mm (a phone is ~72 x 150 mm and 8 mm thick; a full keyboard ~440 x 130 mm).
 
 ## 2. Write the spec
@@ -66,10 +69,12 @@ part's bottom centre sits in the assembled product. Parts may overlap slightly; 
 **Shapes**: `slab` (rounded rectangle plate; `radius` = corner radius), `frame` (a slab with a hole; `wall` thickness),
 `box` (sharp corners), `cylinder`/`disc` (`radius`, height = `size[1]`), `ring` (`radius`, `inner`), `lens` (a camera
 lens with its metal ring), `sphere` (scaled by `size`), `capsule`, `cone` (`radiusTop`), `torus`/`cushion` (`radius`,
-`tube`; lies flat with its hole pointing up: ear cushions, O-rings), `band` (`radius`, `tube`, `arc`: an upright arch
-over the top: headbands, handles, a kettle's grip), `lathe` (`profile`: `[[radius, y], ...]` spun around the vertical
+`tube`; lies flat with its hole pointing up: ear cushions, O-rings, tyres), `band` (`radius`, `tube`, `arc`: an upright
+arch over the top: headbands, handles, a kettle's grip), `tube` (a rod from `from: [x, y, z]` to `to: [x, y, z]`, with
+`radius` and optional `radiusTo`: frame tubes, chair and table legs, struts, straws), `lathe` (`profile`: `[[radius, y], ...]` spun around the vertical
 axis: bottles, cups, knobs, speaker cones, domes; both sides are drawn, so point order doesn't matter).
-`arc` (degrees, default 360) makes a partial `ring`, `torus`, `band` or `lathe`. `stretch: [x, y, z]` scales a part (an
+`arc` (degrees, default 360) makes a partial `ring`, `torus`, `band` or `lathe` (it starts on the +x side; turn it with
+`rot`). `spokes: n` on a `ring` or `torus` adds n spokes and a hub (wheels, fans). `stretch: [x, y, z]` scales a part (an
 oval cushion: `[0.85, 1, 1.15]`). `rot: [x, y, z]` degrees turns a part around its bottom centre (`[90, 0, 0]` stands a
 cylinder on its side, `[0, 90, 0]` turns a slab so its printed text reads along the other side).
 
@@ -82,7 +87,8 @@ copy can also be `{"pos": [x, y, z], "rot": [x, y, z]}` to turn each one (left a
 board), `chip`, `battery` (dark cell; `text` is printed on it, `|` for new lines), `coil` (copper wireless-charging coil),
 `lens`, `screen` (a lit display), `magnet`, `emissive` (glows). `color` (hex) tints most of them. `text` prints a label
 on a slab's top face. Studio lighting brightens colours a little: compare the first check frame with the photo and darken
-the `color` if it looks washed out.
+the `color` if it looks washed out. For dark metal use `steel` or `black` (`aluminum` is for silver tones), and for a
+mostly black product use the light theme so its parts don't vanish into the dark background.
 
 **The user's photo**: use it to get the shape, colours and layout right. If it shows a flat face straight on (a phone's
 back or screen, a card, a lid), you can also map it onto that part: `"photo": "path/to/photo.jpg"` at the top level, then
@@ -94,8 +100,12 @@ angled or perspective shot, use colours and layout only.
 show).
 
 **The view**: the product turns on a turntable: its angle in radians is `spin - spinSpeed × seconds` (defaults 0.95 and
-0.07, so it ends around a three-quarter view). For long flat things where parts hide each other, end side-on: e.g.
-`"spin": 1.9, "spinSpeed": 0.06`. `elevation0`/`elevation1` are the camera's height in degrees (38 → 24 by default).
+0.07, so it ends around a three-quarter view). Angle 0 looks straight at the product's +z side; positive angles turn it
+so you see more of its −x side (1.57 looks at the −x end). For long flat things where parts hide each other, end side-on:
+e.g. `"spin": 1.9, "spinSpeed": 0.06`. `elevation0`/`elevation1` are the camera's height in degrees (38 → 24 by default).
+`zoom` (default 1, e.g. 1.2) enlarges the product if it looks small. Long or wide products (a bike, a sofa, a shoe lying
+flat) come out small in a vertical video: use `"size": "1080x1080"` or `"1920x1080"`, or `zoom`. Labels keep one order
+(the parts' order in the final exploded view).
 
 **Products that aren't a stack** (headphones, a kettle, a controller): pulling apart upward fills a vertical video best,
 so lay the product the way its layers stack vertically. For over-ear headphones, rest them on their side (the cups' axis
@@ -116,7 +126,8 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" breakdown-<product>.json --still
 python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" breakdown-<product>.json --still end --out breakdown-<product>-check2.png
 ```
 
-`--still` takes seconds, or `end`. The first is the assembled product: does it look like the product (shape, proportions,
+`--still` takes seconds, or `end` (add a third at about 3.5 s, when the labels arrive, if parts sit close together). The
+first is the assembled product: does it look like the product (shape, proportions,
 colours)? The second is the exploded view with labels: parts in a sensible order, nothing hidden inside something else,
 each label's dot on its part, labels readable. Fix sizes, positions, levels or the view and check again (two or three
 rounds is normal).

@@ -239,7 +239,9 @@ PATTERNS.cycle = () => {
       const top = Math.sin(A[i]) < -0.7, lw = Math.min(W * 0.34, W - 2 * MARGIN), lx = clamp(x, MARGIN + lw / 2, W - MARGIN - lw / 2);
       const f = fitText(g, label, {maxW: lw, maxLines: 2, size: 48 * U, weight: 700, family: FONT}); g.font = `700 ${f.size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
       const lh = f.size * 1.12, y0 = top ? y - nr - 26 * U - (f.lines.length - 1) * lh : y + nr + 26 * U + f.size * 0.8;
-      f.lines.forEach((l, k) => g.fillText(l, lx, y0 + k * lh)); g.restore();
+      const tw = Math.max(...f.lines.map(l => g.measureText(l).width)), pad = 14 * U;
+      g.fillStyle = TH.bg; g.beginPath(); g.roundRect(lx - tw / 2 - pad, y0 - f.size * 0.92 - pad * 0.6, tw + 2 * pad, (f.lines.length - 1) * lh + f.size * 1.18 + pad * 1.2, 16 * U); g.fill();
+      g.fillStyle = TH.ink; f.lines.forEach((l, k) => g.fillText(l, lx, y0 + k * lh)); g.restore();
     });
     if (t >= T0) for (let k = 0; k < 7; k++) { const th = theta(t - k * 0.03); g.beginPath(); g.arc(CX + rc * Math.cos(th), CY + rc * Math.sin(th), 15 * U * (1 - k * 0.12), 0, 2 * Math.PI);
       g.fillStyle = k ? alpha(TH.dot, 0.5 - k * 0.06) : TH.dot; g.fill(); }
@@ -268,8 +270,8 @@ PATTERNS.converge = () => {
     const done = dots.filter(d => t >= d.s + d.dur).length, frac = done / count;
     srcs.forEach((s, i) => {   // the sources (or destinations), each a small node with its label
       const x = CX + ring * Math.cos(SA[i]), y = CY + ring * Math.sin(SA[i]), q = E.out(prog(t, 0.05 + i * 0.08, 0.4 + i * 0.08)); if (q <= 0) return;
-      const got = out ? dots.filter(d => d.src === i && t >= d.s + d.dur).length / Math.max(1, dots.filter(d => d.src === i).length) : 0;
-      g.beginPath(); g.arc(x, y, (20 + 18 * got) * U * q, 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill();
+      const most = Math.max(...srcs.map((_, j) => dots.filter(d => d.src === j).length)), got = out ? Math.sqrt(dots.filter(d => d.src === i && t >= d.s + d.dur).length / Math.max(1, most)) : 0;
+      g.beginPath(); g.arc(x, y, (18 + 30 * got) * U * q, 0, 2 * Math.PI); g.fillStyle = TH.ink; g.fill();
       g.save(); g.globalAlpha = q; g.fillStyle = TH.ink; const below = Math.sin(SA[i]) > -0.2, lw = W * 0.34, lx = clamp(x, MARGIN + lw / 2, W - MARGIN - lw / 2);
       const f = fitText(g, s, {maxW: lw, maxLines: 2, size: 44 * U, weight: 700, family: FONT}); g.font = `700 ${f.size}px ${FONT}`; g.textAlign = 'center';
       const lh = f.size * 1.12, y0 = below ? y + 48 * U + f.size * 0.75 : y - 48 * U - (f.lines.length - 1) * lh; f.lines.forEach((l, k) => g.fillText(l, lx, y0 + k * lh)); g.restore();

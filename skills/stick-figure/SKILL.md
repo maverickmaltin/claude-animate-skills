@@ -68,8 +68,9 @@ More: `examples/contagious-yawns.json` (three people), `examples/procrastination
 **Scene**: `street` (sky, pavement, road), `park` (sun, hills, grass), `room`, `office` (window with a city), `classroom`
 (add `"board": "text"` for the chalkboard), `night` (stars and moon), `plain` (add `"background": "#hex"`).
 
-**Figures** (up to 5; `x` from 0 = left edge to 1 = right edge; keep people 0.12-0.88 and ~0.3 apart; use -0.2 or 1.2 to
-start off-screen and walk in):
+**Figures** (`x` from 0 = left edge to 1 = right edge; use -0.2 or 1.2 to start off-screen and walk in). Three people fit
+a vertical video comfortably (x 0.2, 0.5, 0.8); a fourth needs `scale` ~0.85 and ~0.22 spacing; pets take little room.
+Keep name labels short ("Bill", not "The bill"):
 - `kind`: `person` (default), `cat`, `dog` (side-on, about a third of a person's height).
 - `id`, `x`, `label` (a name under their feet: "You", "Your brain"), `scale` (0.6-0.8 for a child), `facing`
   (`left`/`right`; otherwise they face the middle, then wherever they last moved, pointed or swiped).
@@ -90,18 +91,21 @@ start off-screen and walk in):
 | `sleep` | Eyes shut, Zzz | `laugh` | Bouncing, big grin |
 | `dance` | Dancing, music note | `idea` | Arm up, light bulb |
 | `love` | Heart | `fall` | Falls over and stays down |
+| `raise` | One hand up (voting, asking, "me!") | `write` | Writing or signing at a desk |
+| `relabel` | Changes the name tag: `{"who": "bill", "do": "relabel", "at": 4, "text": "Law"}` | | |
 
 Pets: `walk`, `run`, `jump`, `sit`, `swipe` (a paw swipe toward `to`, for knocking things over), `sleep` (curled up, Zzz),
 `meow`/`bark`/`talk` (mouth open; add `say`), `surprised` (arched back, "!"), `look` (turns to face `to`), `wag` (happy,
 tail going), `love`, `idea`, `sad`.
 
 `say` puts a speech bubble over that figure for that beat (up to 5 words; `think` makes a thought bubble; the bubble
-replaces the beat's little icon). Each figure's **last beat holds its pose to the end** (except walking, running, talking
-and yawning), so end on the payoff.
+replaces the beat's little icon; bubbles keep clear of other people's faces). Each figure's **last beat holds its pose to
+the end** (except walking, running, talking and yawning), and the last line said in the scene stays up too, so end on the
+payoff. `point` aims at a far figure's head and at a close one's chest.
 
 **Props** (`{"type", "x", ...}`): furniture and set pieces `bus-stop`, `tree`, `bench`, `desk` (with a laptop), `table`,
 `door`, `sign` (with `text`), `car` (`"drive": 1` drives it past), `house`, `plant`, `lamp`, `tv`, `bed`; and small
-objects `cup`, `mug`, `glass`, `vase`, `bottle`, `plate`, `ball`, `book`, `phone`, `box`. Small objects sit on the floor or
+objects `cup`, `mug`, `glass`, `vase`, `bottle`, `plate`, `ball`, `book`, `phone`, `box`, `paper` (a document). Small objects sit on the floor or
 `"on": "table"` (or `desk`, `bench`, `shelf`, `bed`; give them an x inside that furniture's width, which is about ±0.15
 around its x); `"wobbleAt": s` makes one wobble, `"fallAt": s` knocks it off (`"fallDir": -1` to the left); cups,
 glasses, vases, bottles and plates smash with a CRASH (`"sound": "SMASH!"` changes the word), balls bounce away.
@@ -110,7 +114,7 @@ Also `color`, `scale`, `front: true` (drawn in front of the characters).
 **Arrows** (`{"from", "to", "at", "for", "color", "hold"}`): a dotted arrow from one head to another, like "it passes on";
 `hold` is how long it stays after drawing (default 0.9 s).
 
-Other fields: `answerAt` (seconds; default ~1.1), `size` (`"1080x1920"` default, `"1080x1080"`, `"1920x1080"`),
+Other fields: `answer` breaks where it fits (about 24 characters a line); put a `|` where you want the break. `answerAt` (seconds; default ~1.1), `size` (`"1080x1920"` default, `"1080x1080"`, `"1920x1080"`),
 `duration` (default: the last beat's end + 1.3 s, at least 5), `fps` (default 30).
 
 Staging tips: start a beat at 0.0 so nobody is frozen at the start; overlap beats a little so something always moves;
@@ -124,8 +128,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" stick-<topic>.json --still 2.5 -
 python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" stick-<topic>.json --still end --out stick-<topic>-check3.png
 ```
 
-`--still` takes seconds, or `end`. Look at them: characters on screen and facing the right way, bubbles not covering
-faces or the title, the story readable without sound. Adjust positions or timing and check again if not.
+`--still` takes seconds, or `end`; also check the time of the key moment (the knock-over, the reveal). Look at them:
+characters on screen and facing the right way, nobody walking through someone else, bubbles not covering faces or the
+title, the story readable without sound. Adjust positions or timing and check again if not.
 
 ## 4. Render the video
 
@@ -133,7 +138,7 @@ faces or the title, the story readable without sound. Adjust positions or timing
 python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" stick-<topic>.json --out stick-<topic>.mp4
 ```
 
-About 15-25 seconds. Delete the check images.
+About 10-25 seconds. Delete the check images.
 
 ## 5. Deliver
 

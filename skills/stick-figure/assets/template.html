@@ -113,8 +113,10 @@ const BEATS = (S.beats || []).map(b => Object.assign({}, b, {s: at(b), d: Math.m
 BEATS.forEach(b => { b.d0 = b.d; });
 BEATS.forEach(b => { if (b.do !== 'fall') return; const nx = BEATS.find(o => o.who === b.who && o.s > b.s); b.d = (nx ? nx.s : 999) - b.s; b.hold = true; });
 const NO_HOLD = ['walk', 'run', 'yawn', 'talk', 'meow', 'bark'];
-FIGS.forEach(f => { const mine = BEATS.filter(b => b.who === f.id); const last = mine[mine.length - 1];   // the payoff stays on screen
+let PAYOFF = null;
+FIGS.forEach(f => { const mine = BEATS.filter(b => b.who === f.id && b.do !== 'relabel'); const last = mine[mine.length - 1];   // the payoff stays on screen
   if (last && !NO_HOLD.includes(last.do) && !last.hold && !mine.some(b => b !== last && b.s + b.d0 > last.s + last.d0)) { last.d = 999; last.hold = true; } });
+BEATS.forEach(b => { if (b.hold && b.say && b.do !== 'fall' && (!PAYOFF || b.s >= PAYOFF.s)) PAYOFF = b; });   // the last line said stays up
 FIGS.forEach(f => {   // x over time: each walk/run moves the figure from where it is to its "to"
   let x = f.x0; f.moves = [];
   BEATS.filter(b => b.who === f.id && (b.do === 'walk' || b.do === 'run') && b.to != null).forEach(b => {
@@ -156,9 +158,14 @@ const ACTIONS = {
   talk: (u) => ({ch: ['armR'], armR: [42 + 6 * sw(u, 0.9), -18 + 24 * sw(u, 0.9)], mouth: 'open', open: 0.25 + 0.3 * Math.abs(sw(u, 0.26))}),
   yawn: (u, b) => { const k = clamp(Math.min(u / 0.45, (b.d - u) / 0.45));   // rise, hold, fall
     const q = E.io(k); return {ch: ['body', 'arms', 'head'], w: q, lean: -5, tilt: -14, armL: [236, 262], armR: [-56, -82], lift: 10, mouth: 'yawn', open: q, eyes: q > 0.55 ? 'closed' : 'open'}; },
-  look: (u, b, f, t) => { const tx = targetX(b, f, t); const dir = tx == null ? 1 : Math.sign(tx - xAt(f, t) * W) || 1; return {ch: ['head'], turn: dir * f.face, tilt: -6 * dir * f.face}; },
+  look: (u, b, f, t) => { const tx = targetX(b, f, t); const dir = tx == null ? 1 : Math.sign(tx - xAt(f, t) * W) || 1; return {ch: ['head'], turn: 1.4 * dir * f.face, tilt: -10 * dir * f.face}; },
+  raise: (u) => ({ch: ['armR'], armR: [-52, -78], mouth: 'smile'}),
+  write: (u) => ({ch: ['armR', 'head'], armR: [40 + 5 * sw(u, 0.5), 70 + 14 * sw(u, 0.25)], tilt: 12, turn: 0.5, mouth: 'flat'}),
+  relabel: () => ({ch: []}),
   point: (u, b, f, t) => { const tx = targetX(b, f, t), fx = xAt(f, t) * W, dir = tx == null ? 1 : Math.sign(tx - fx) || 1, sy = GY - elev(f) - 366 * FS * f.scale;
-    const ty = targetY(b) != null ? targetY(b) : sy - H * 0.04, ang = tx == null ? -8 : Math.atan2(ty - sy, Math.max(30, Math.abs(tx - fx))) * 180 / Math.PI;
+    const near = tx != null && BYID[b.to] && Math.abs(tx - fx) < 260 * FS * f.scale, tgt = BYID[b.to];
+    const ty = near ? GY - elev(tgt) - (tgt.kind === 'person' ? 300 : 80) * FS * tgt.scale : (targetY(b) != null ? targetY(b) : sy - H * 0.04);
+    const ang = tx == null ? -8 : Math.atan2(ty - sy, Math.max(30, Math.abs(tx - fx))) * 180 / Math.PI;
     return {ch: ['armR', 'head'], face: dir, armR: [ang, ang - 4], turn: 1, mouth: 'open', open: 0.15}; },
   think: (u) => ({ch: ['armR', 'head'], armR: [62, -118], tilt: 9, turn: 0.35, eyes: 'up', mouth: 'flat'}),
   shrug: (u) => ({ch: ['arms', 'head', 'body'], armL: [128, 205], armR: [52, -25], tilt: 9, lift: 5 * Math.abs(sw(u, 1.2)), mouth: 'flat'}),
@@ -192,7 +199,8 @@ function poseAt(f, t) {
     const keys = [].concat(...(A.ch || []).map(c => CH[c]));
     for (const k of keys) { if (A[k] == null) continue; p[k] = Array.isArray(p[k]) ? p[k].map((v, j) => lerp(v, A[k][j], w)) : lerp(p[k], A[k], w); }
     if (w > 0.45 || A.mouth === 'yawn') { if (A.mouth) { face.mouth = A.mouth; face.open = A.open || 0; } if (A.eyes) face.eyes = A.eyes; if (A.emote !== undefined) face.emote = A.emote; }
-    if (b.say && u > 0.08 && u < b.d0 - 0.02) say = {text: b.say, kind: b.do === 'think' ? 'thought' : 'speech', q: Math.min(clamp(u / 0.25), clamp((b.d0 - u) / 0.2))};
+    const sEnd = b === PAYOFF ? 999 : b.d0;
+    if (b.say && u > 0.08 && u < sEnd - 0.02) say = {text: b.say, kind: b.do === 'think' ? 'thought' : 'speech', q: Math.min(clamp(u / 0.25), clamp((sEnd - u) / 0.2))};
   }
   if (say) face.emote = null;
   return {p, face, facing, say};
@@ -268,7 +276,8 @@ function animalState(f, t) {
       case 'wag': case 'cheer': case 'dance': case 'laugh': st.wag = 1; st.eyes = 'happy'; if (b.do === 'dance') st.jump = Math.max(st.jump, 16 * Math.abs(Math.sin(u * 2 * Math.PI / 0.5))); break;
       default: break;
     }
-    if (b.say && u > 0.08 && u < b.d0 - 0.02) st.say = {text: b.say, kind: 'speech', q: Math.min(clamp(u / 0.25), clamp((b.d0 - u) / 0.2))};
+    const sEnd = b === PAYOFF ? 999 : b.d0;
+    if (b.say && u > 0.08 && u < sEnd - 0.02) st.say = {text: b.say, kind: 'speech', q: Math.min(clamp(u / 0.25), clamp((sEnd - u) / 0.2))};
   }
   if (st.say) st.emote = null;
   return {st, facing};
@@ -338,7 +347,11 @@ function bubble(f, say) {
   const fit = fitText(g, say.text, {maxW: Math.min(W * 0.36, 420 * U), maxLines: 2, size: 48 * U, min: 26 * U, weight: 800, family: FONT});
   g.font = `800 ${fit.size}px ${FONT}`; const tw = Math.max(...fit.lines.map(l => g.measureText(l).width)), lh = fit.size * 1.12;
   const bw = tw + 64 * U, bh = fit.lines.length * lh + 40 * U;
-  const x = clamp(hp.x + side * (bw * 0.25 + 10 * U), bw / 2 + 16 * U, W - bw / 2 - 16 * U), y = Math.max(hp.y - hp.r - bh / 2 - 66 * U, TEXT_BOTTOM + bh / 2 + 22 * U);
+  const x = clamp(hp.x + side * (bw * 0.25 + 10 * U), bw / 2 + 16 * U, W - bw / 2 - 16 * U);
+  let y = hp.y - hp.r - bh / 2 - 66 * U;
+  FIGS.forEach(o => { if (o === f || !o.headPos) return; const oh = o.headPos;   // never over a neighbour's face
+    if (Math.abs(oh.x - x) < bw / 2 + oh.r) y = Math.min(y, oh.y - oh.r - bh / 2 - 44 * U); });
+  y = Math.max(y, TEXT_BOTTOM + bh / 2 + 22 * U);
   g.save(); g.translate(x, y); g.scale(s, s); g.globalAlpha = clamp(q * 1.6);
   g.fillStyle = '#FFFFFF'; g.strokeStyle = INK; g.lineWidth = 7 * U;
   if (say.kind === 'thought') {
@@ -401,7 +414,10 @@ const SCENES = {
     g.fillStyle = '#9ED4FF'; g.beginPath(); g.roundRect(W * 0.08, H * 0.33, W * 0.36, H * 0.19, 8 * U); g.fill(); g.stroke();
     g.fillStyle = '#7FA9CC'; [[0.11, 0.08], [0.18, 0.12], [0.26, 0.06], [0.33, 0.1]].forEach(([x, h]) => g.fillRect(W * x, H * (0.52 - h), W * 0.06, H * h)); g.strokeRect(W * 0.08, H * 0.33, W * 0.36, H * 0.19); },
   classroom: t => { g.fillStyle = '#F4E9D8'; g.fillRect(0, 0, W, GY); g.fillStyle = '#B98A5E'; g.fillRect(0, GY, W, H - GY); groundLine(GY); g.lineWidth = 9 * U; g.strokeStyle = INK;
-    g.fillStyle = '#2F5D50'; g.beginPath(); g.roundRect(W * 0.12, H * 0.33, W * 0.76, H * 0.17, 8 * U); g.fill(); g.stroke(); if (S.board) { g.fillStyle = '#FFFFFF'; g.font = `800 ${54 * U}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(S.board), W / 2, H * 0.415); } },
+    const by = Math.max(TEXT_BOTTOM + 24 * U, H * 0.29), bh2 = Math.max(80 * U, GY - 520 * FS - by - 20 * U);   // above everyone's heads
+    g.fillStyle = '#2F5D50'; g.beginPath(); g.roundRect(W * 0.12, by, W * 0.76, bh2, 8 * U); g.fill(); g.stroke();
+    if (S.board) { g.fillStyle = '#FFFFFF'; const fb = fitText(g, String(S.board), {maxW: W * 0.68, maxLines: 2, size: 50 * U, min: 26 * U, weight: 800, family: FONT}); g.font = `800 ${fb.size}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      fb.lines.forEach((l, i) => g.fillText(l, W / 2, by + bh2 / 2 + (i - (fb.lines.length - 1) / 2) * fb.size * 1.1)); } },
   night: t => { sky('#0E1A3A', '#2B3D6B'); const r = rng(5); g.fillStyle = '#FFFFFF'; for (let k = 0; k < 60; k++) { const x = r() * W, y = r() * GY * 0.95, tw = 0.5 + 0.5 * Math.sin(t * 3 + k); g.globalAlpha = 0.4 + 0.6 * tw; g.beginPath(); g.arc(x, y, (1.5 + r() * 2.5) * U, 0, 2 * Math.PI); g.fill(); } g.globalAlpha = 1;
     g.fillStyle = '#FFF4C7'; g.beginPath(); g.arc(W * 0.8, H * 0.36, 70 * U, 0, 2 * Math.PI); g.fill(); g.fillStyle = '#0E1A3A'; g.beginPath(); g.arc(W * 0.8 + 34 * U, H * 0.345, 62 * U, 0, 2 * Math.PI); g.fill();
     g.fillStyle = '#1B2747'; g.fillRect(0, GY, W, H - GY); g.strokeStyle = '#000'; g.lineWidth = 10 * U; g.beginPath(); g.moveTo(0, GY); g.lineTo(W, GY); g.stroke(); },
@@ -410,7 +426,7 @@ const SCENES = {
 SCENES.space = SCENES.night; SCENES.home = SCENES.room; SCENES.school = SCENES.classroom; SCENES.outside = SCENES.park;
 // ---------------- small objects: on the floor or on a table, desk, bench or shelf, and they can be knocked off ----------------
 const SMALL = {cup: {brk: true}, mug: {brk: true}, glass: {brk: true}, vase: {brk: true}, bottle: {brk: true}, plate: {brk: true},
-  ball: {ball: true}, book: {}, phone: {}, box: {}};
+  ball: {ball: true}, book: {}, phone: {}, box: {}, paper: {}};
 const SHARD = {cup: '#FF6B6B', mug: '#FF6B6B', glass: 'rgba(160,215,255,0.9)', vase: '#7C9CFF', bottle: '#5DBB63', plate: '#FFFFFF'};
 function smallShape(type, col) {   // standing on y = 0, centred on x = 0, in units
   g.strokeStyle = INK; g.lineWidth = 7; g.lineJoin = 'round'; g.lineCap = 'round';
@@ -424,6 +440,7 @@ function smallShape(type, col) {   // standing on y = 0, centred on x = 0, in un
     case 'book': g.fillStyle = col || '#3B82F6'; g.beginPath(); g.roundRect(-40, -20, 80, 20, 3); g.fill(); g.stroke(); g.fillStyle = '#FFFFFF'; g.fillRect(-34, -14, 64, 6); break;
     case 'phone': g.fillStyle = col || '#2B2F38'; g.beginPath(); g.roundRect(-22, -10, 44, 10, 3); g.fill(); g.stroke(); break;
     case 'box': g.fillStyle = col || '#C98B52'; g.beginPath(); g.rect(-34, -54, 68, 54); g.fill(); g.stroke(); g.beginPath(); g.moveTo(-34, -40); g.lineTo(34, -40); g.stroke(); break;
+    case 'paper': g.fillStyle = col || '#FFFFFF'; g.beginPath(); g.roundRect(-30, -78, 60, 78, 4); g.fill(); g.stroke(); g.lineWidth = 4; for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(-20, -62 + k * 15); g.lineTo(k === 3 ? 4 : 20, -62 + k * 15); g.stroke(); } break;
     default: break;
   }
 }
@@ -503,8 +520,9 @@ function titles(t) {
     AT.lines.forEach((l, i) => g.fillText(l, W / 2, TY + (TT.lines.length - 1) * LH + 94 * U + i * AT.size * 1.12)); g.restore(); } }
 }
 function nameTags(t) {
-  FIGS.forEach(f => { if (!f.label) return; const x = xAt(f, t) * W, y = GY - elev(f) + 92 * U; g.save(); g.font = `900 ${46 * U}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 10 * U; g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineJoin = 'round'; g.strokeText(f.label, x, y); g.fillStyle = '#FFFFFF'; g.fillText(f.label, x, y); g.restore(); });
+  FIGS.forEach(f => { let lab = f.label; BEATS.forEach(b => { if (b.who === f.id && b.do === 'relabel' && b.s <= t) lab = b.text || b.label || lab; });
+    if (!lab) return; const x = xAt(f, t) * W, y = GY - elev(f) + 92 * U; g.save(); g.font = `900 ${46 * U}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 10 * U; g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineJoin = 'round'; g.strokeText(lab, x, y); g.fillStyle = '#FFFFFF'; g.fillText(lab, x, y); g.restore(); });
 }
 
 // ---------------- the frame ----------------

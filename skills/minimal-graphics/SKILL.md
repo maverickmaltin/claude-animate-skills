@@ -33,13 +33,14 @@ No browser possible here (for example the Claude app's sandbox)? See the end of 
 | Pattern | Shows | Good for | Fields |
 |---|---|---|---|
 | `spread` | One dot reaches 2-4 others, each of those reaches more, ring by ring | Viral ideas, word of mouth, chain reactions, referrals, things that double | `branches` (2-4, default 3), `depth` (2-5, default 4), `sequence` (optional short labels per ring, e.g. `["1","3","9","27","81"]` or `["$1k","$2k","$4k"]`, shown in a line under the title as each ring lights; a few characters each) |
-| `flow` | Numbered shapes in order, a dot travelling from each to the next, then a steady stream | How something works, a process, a pipeline, a recipe | `steps`: 2-6 short labels |
+| `flow` | Numbered shapes in order, a dot travelling from each to the next, then a steady stream | How something works, a process, a pipeline, a recipe | `steps`: 2-6 short labels; `shapes` (the shapes are decoration: `["circle"]` makes them all circles) |
 | `cycle` | Steps on a loop with a dot that keeps orbiting | Water cycle, habit loop, feedback loops, seasons, sleep cycles | `steps`: 3-6 short labels; `center`: a word in the middle |
 | `converge` | Many dots flowing into one circle that grows (or `"direction": "out"`: one circle sending dots out to several) | Where your attention, time or money goes; many inputs into one result | `sources`: 2-6 labels (optional); `weights`: how many dots each gets; `center`: the word in the circle; `count`: dots (default ~40) |
 | `compare` | Two or three amounts side by side, as dots (one per unit) or as circles sized by the amount | "X vs Y" amounts: sugar, cost, time, calories | `groups`: `[{"label": "...", "value": n, "unit": "..."}]`; `highlight`: index of the one to colour |
 
 If none fits well, use the closest one and say so in one line; don't force a misleading picture. A pattern shows the
-shape of an idea; the `takeaway` line says the point in words.
+shape of an idea; the `takeaway` line says the point in words. Ideas about two forces balancing (supply and demand,
+work-life balance) have no pattern of their own: show the loop that settles them as a `cycle`, or say so.
 
 ## 2. Write the spec
 
@@ -86,7 +87,7 @@ check again if not.
 python3 "${CLAUDE_SKILL_DIR}/scripts/render.py" minimal-<topic>.json --out minimal-<topic>.mp4
 ```
 
-About 15-25 seconds. Delete the check images.
+About 10-25 seconds. Delete the check images.
 
 ## 5. Deliver
 

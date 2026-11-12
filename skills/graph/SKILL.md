@@ -54,11 +54,12 @@ Rules:
 |---|---|
 | `title`, `subtitle` | Headline and a small line under it (period, unit). |
 | `data` | `[["label", number], ...]` or `[{"label": "...", "value": n}, ...]`, in order. |
-| `type` | Leave out for automatic (bars up to 10 values, a line above). `"bar"` or `"line"` to force. |
+| `type` | Leave out for automatic: bars up to 10 values; a line for longer series, and for values that change little next to their size (a weight going 210 → 178, a price, a temperature), where the line zooms in on the range. `"bar"` or `"line"` to force. |
 | `prefix`, `suffix` | Units: `"$"`, `"€"`, `"%"`, `" kg"`. |
 | `decimals` | Force decimals. Default: each value keeps its own. |
 | `compact` | Default shows 10,000+ as 12K / 1.5M / 2B. `false` for full numbers. |
 | `callout` | Leave out for the automatic growth tag from first to last value (`↑ 7.5x`; whole numbers from 10x up, `↑ 77x`; `↑ 32%`; `↓ 18%`). A short text of your own (`"Back in profit"`), or `null` for none. |
+| `good` | `"down"` when lower is better (weight lost, debt paid off, costs, race times): a drop gets a green tag instead of a red one. |
 | `highlight` | Which bar is gold: `"last"` (default), `"max"`, an index, or `"none"`. |
 | `theme` | `night` (dark navy, coral bars; default), `light`, `sunset`, `mint`. |
 | `source` | Small "Source: ..." note under the chart. |
