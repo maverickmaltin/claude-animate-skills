@@ -42,7 +42,7 @@ No browser possible here (for example the Claude app's sandbox)? See the end of 
 
 Save `breakdown-<product>.json`. Each part is a simple shape placed where it sits in the assembled product; `level` says
 how far it travels when the product comes apart (0 stays put, 1 moves one step, 2 two steps; parts with the same level
-move together; halves like 3.5 work). Example (`examples/smartphone.json`, shortened):
+move together; halves like 3.5 work, and negative levels move the other way). Example (`examples/smartphone.json`, shortened):
 
 ```json
 {
@@ -66,12 +66,16 @@ part's bottom centre sits in the assembled product. Parts may overlap slightly; 
 **Shapes**: `slab` (rounded rectangle plate; `radius` = corner radius), `frame` (a slab with a hole; `wall` thickness),
 `box` (sharp corners), `cylinder`/`disc` (`radius`, height = `size[1]`), `ring` (`radius`, `inner`), `lens` (a camera
 lens with its metal ring), `sphere` (scaled by `size`), `capsule`, `cone` (`radiusTop`), `torus`/`cushion` (`radius`,
-`tube`: ear cushions, O-rings), `lathe` (`profile`: `[[radius, y], ...]` spun around the vertical axis: bottles, cups,
-knobs, speaker cones). `rot: [x, y, z]` degrees turns a part (e.g. `[90, 0, 0]` stands a cylinder on its side, `[0, 90,
-0]` turns a slab so its printed text reads along the other side).
+`tube`; lies flat with its hole pointing up: ear cushions, O-rings), `band` (`radius`, `tube`, `arc`: an upright arch
+over the top: headbands, handles, a kettle's grip), `lathe` (`profile`: `[[radius, y], ...]` spun around the vertical
+axis: bottles, cups, knobs, speaker cones, domes; both sides are drawn, so point order doesn't matter).
+`arc` (degrees, default 360) makes a partial `ring`, `torus`, `band` or `lathe`. `stretch: [x, y, z]` scales a part (an
+oval cushion: `[0.85, 1, 1.15]`). `rot: [x, y, z]` degrees turns a part around its bottom centre (`[90, 0, 0]` stands a
+cylinder on its side, `[0, 90, 0]` turns a slab so its printed text reads along the other side).
 
-**Repeats**: `copies: [[x, z], ...]` (or `[x, y, z]`) places the same part several times (cameras, screws, buttons);
-`grid: {"nx": 14, "nz": 5, "pitch": 19}` lays out a grid (keycaps, cells, LEDs).
+**Repeats**: `copies: [[x, z], ...]` (or `[x, y, z]`) places the same part several times (cameras, screws, buttons); a
+copy can also be `{"pos": [x, y, z], "rot": [x, y, z]}` to turn each one (left and right ear cups facing outward).
+`grid: {"nx": 14, "nz": 5, "pitch": 19}` lays out a grid (keycaps, cells, LEDs). The label dot goes on the first copy.
 
 **Materials**: `glass` (clear), `glass-tint` (coloured glass), `aluminum`, `steel`, `gold`, `copper`, `black`, `white`,
 `plastic` (any `color`), `ceramic`, `rubber`, `foam`, `fabric` (mesh grille), `wood`, `leather`, `pcb` (green circuit
@@ -93,8 +97,14 @@ show).
 0.07, so it ends around a three-quarter view). For long flat things where parts hide each other, end side-on: e.g.
 `"spin": 1.9, "spinSpeed": 0.06`. `elevation0`/`elevation1` are the camera's height in degrees (38 → 24 by default).
 
+**Products that aren't a stack** (headphones, a kettle, a controller): pulling apart upward fills a vertical video best,
+so lay the product the way its layers stack vertically. For over-ear headphones, rest them on their side (the cups' axis
+upright) and pull one cup's layers apart upward (cushion, mesh, driver, board, battery, shell) while the band and the
+other cup stay assembled; use `explode: [x, y, z]` per part for exact travel.
+
 Other fields: `title` (e.g. "Inside a ..."), `subtitle`, `theme` (`dark` default, `light`), `axis` (`"y"` pulls apart
-upward, default; `"x"` or `"z"` pulls apart sideways, for long things like pens, bottles on their side, headphones),
+upward, default; `"x"` or `"z"` pulls apart sideways, for long thin things like pens or a bottle on its side; sideways
+comes out smaller in a vertical frame),
 `gap` (mm between levels; default ~19% of the product's size), `explode: [x, y, z]` on a part (its own travel in mm,
 instead of its level), `apartAt` (seconds; default 1.5), `size`, `duration` (default ~6-7 s, enough to read the labels),
 `fps`. A second example: `examples/mechanical-keyboard.json`.

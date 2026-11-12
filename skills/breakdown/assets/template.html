@@ -184,15 +184,25 @@ function buildShape(p) {
   else if (shp === 'frame') { const s = rrShape(w, d, r), wall = Number(p.wall || Math.min(w, d) * 0.04); s.holes.push(rrShape(w - 2 * wall, d - 2 * wall, Math.max(0.5, r - wall))); add(extrude(s, h, Math.min(0.6, wall * 0.3))); }
   else if (shp === 'box') { const geo = new THREE.BoxGeometry(w, h, d); geo.translate(0, h / 2, 0); add(geo); if (tf) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial(Object.assign({roughness: 0.5}, tf))); m.rotation.x = -Math.PI / 2; m.position.y = h + 0.02; grp.add(m); } }
   else if (shp === 'cylinder' || shp === 'disc' || shp === 'puck') { const rr = p.radius != null ? Number(p.radius) : w / 2; const geo = new THREE.CylinderGeometry(rr, rr, h, 72); geo.translate(0, h / 2, 0); add(geo); if (tf) grp.add(circlePlane(rr * 0.995, h, tf)); }
-  else if (shp === 'ring') { const ro = p.radius != null ? Number(p.radius) : w / 2, ri = Number(p.inner != null ? p.inner : ro * 0.7); const s = new THREE.Shape(); s.absarc(0, 0, ro, 0, Math.PI * 2, false); const hole = new THREE.Path(); hole.absarc(0, 0, ri, 0, Math.PI * 2, true); s.holes.push(hole); add(extrude(s, h, Math.min(0.5, (ro - ri) * 0.2))); }
+  else if (shp === 'ring') { const ro = p.radius != null ? Number(p.radius) : w / 2, ri = Number(p.inner != null ? p.inner : ro * 0.7), arc = THREE.MathUtils.degToRad(Number(p.arc) || 360);
+    const s = new THREE.Shape();
+    if (arc >= Math.PI * 2 - 1e-3) { s.absarc(0, 0, ro, 0, Math.PI * 2, false); const hole = new THREE.Path(); hole.absarc(0, 0, ri, 0, Math.PI * 2, true); s.holes.push(hole); }
+    else { s.absarc(0, 0, ro, 0, arc, false); s.absarc(0, 0, ri, arc, 0, true); s.closePath(); }   // a partial ring: a C-shape
+    add(extrude(s, h, Math.min(0.5, (ro - ri) * 0.2))); }
   else if (shp === 'lens') { const rr = p.radius != null ? Number(p.radius) : w / 2; const ring = new THREE.CylinderGeometry(rr * 1.2, rr * 1.2, h * 0.9, 56); ring.translate(0, h * 0.45, 0); add(ring, material({material: 'aluminum'}));
     const gl = new THREE.CylinderGeometry(rr, rr, h, 56); gl.translate(0, h / 2 + 0.05, 0); add(gl, material({material: 'lens'})); }
   else if (shp === 'sphere' || shp === 'ball') { const geo = new THREE.SphereGeometry(0.5, 64, 40); geo.scale(w, h, d); geo.translate(0, h / 2, 0); add(geo); }
   else if (shp === 'capsule') { const rr = Math.min(w, d) / 2, geo = new THREE.CapsuleGeometry(rr, Math.max(0.01, h - 2 * rr), 12, 48); geo.translate(0, h / 2, 0); add(geo); }
   else if (shp === 'cone') { const geo = new THREE.CylinderGeometry(Number(p.radiusTop != null ? p.radiusTop : 0), w / 2, h, 64); geo.translate(0, h / 2, 0); add(geo); }
-  else if (shp === 'torus' || shp === 'cushion') { const tube = Number(p.tube || h / 2), rr = (p.radius != null ? Number(p.radius) : w / 2) - tube; const geo = new THREE.TorusGeometry(rr, tube, 32, 96); geo.rotateX(Math.PI / 2); geo.translate(0, tube, 0); add(geo); }
-  else if (shp === 'lathe') { const prof = (p.profile || [[0, 0], [w / 2, 0], [w / 2, h], [0, h]]).map(([x, y]) => new THREE.Vector2(Math.max(0, x), y)); const geo = new THREE.LatheGeometry(prof, 96); add(geo); }
+  else if (shp === 'torus' || shp === 'cushion' || shp === 'band') { const tube = Number(p.tube || h / 2), rr = (p.radius != null ? Number(p.radius) : w / 2) - tube, arc = THREE.MathUtils.degToRad(Number(p.arc) || 360);
+    const geo = new THREE.TorusGeometry(rr, tube, 32, 128, arc);
+    if (shp === 'band') { geo.rotateZ(Math.PI / 2 - arc / 2); geo.translate(0, tube, 0); }   // standing up, arching over the top (a headband)
+    else { geo.rotateX(Math.PI / 2); geo.translate(0, tube, 0); }                            // lying flat, hole along y (a cushion)
+    add(geo); }
+  else if (shp === 'lathe') { const prof = (p.profile || [[0, 0], [w / 2, 0], [w / 2, h], [0, h]]).map(([x, y]) => new THREE.Vector2(Math.max(0, x), y));
+    const geo = new THREE.LatheGeometry(prof, 96, 0, THREE.MathUtils.degToRad(Number(p.arc) || 360)); const m2 = mat.clone(); m2.side = THREE.DoubleSide; add(geo, m2); }
   else { add(extrude(rrShape(w, d, r), h, 0.4)); }
+  if (p.stretch) grp.scale.set(...p.stretch.map(Number));                 // e.g. [1.15, 1, 0.9] makes a round cushion oval
   if (p.rot) grp.rotation.set(...p.rot.map(a => Number(a) * Math.PI / 180));
   return grp;
 }
@@ -204,10 +214,10 @@ const parts = [];
 function buildAll() {
   PARTS.forEach(p => {
     const holder = new THREE.Group(), base = p.pos ? p.pos.map(Number) : [Number(p.x || 0), Number(p.y || 0), Number(p.z || 0)];
-    const copies = p.copies ? p.copies.map(c => c.length === 3 ? c.map(Number) : [Number(c[0]), 0, Number(c[1])]) : [[0, 0, 0]];
+    const copies = p.copies ? p.copies.map(c => Array.isArray(c) ? (c.length === 3 ? c.map(Number) : [Number(c[0]), 0, Number(c[1])]) : Object.assign((c.pos || [0, 0, 0]).map(Number), {rot: c.rot})) : [[0, 0, 0]];
     if (p.grid) { const g = p.grid, nx = g.nx || 1, nz = g.nz || 1, px = g.pitch || g.px || 10, pz = g.pitchZ || g.pz || px; copies.length = 0;
       for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) copies.push([(i - (nx - 1) / 2) * px, 0, (k - (nz - 1) / 2) * pz]); }
-    copies.forEach(c => { const s = buildShape(p); s.position.set(c[0], c[1], c[2]); holder.add(s); });
+    copies.forEach(c => { const s = buildShape(c.rot ? Object.assign({}, p, {rot: c.rot}) : p); s.position.set(c[0], c[1], c[2]); holder.add(s); });
     holder.position.set(...base); root.add(holder);
     parts.push({p, holder, base: new THREE.Vector3(...base), level: Number(p.level || 0), off: p.explode ? new THREE.Vector3(...p.explode.map(Number)) : null});
   });
@@ -269,10 +279,14 @@ let TT, TLH, TY;
 function project(v) { _v.copy(v).project(camera); return [(_v.x + 1) / 2 * W, (1 - _v.y) / 2 * H]; }
 function anchorOf(o) {   // the point of the part furthest right on screen, on its own top face (sampled in the part's own space)
   let best = null; o.holder.updateMatrixWorld(true);
-  o.holder.traverse(m => {
+  const first = o.holder.children[0] || o.holder;          // one copy only, so the dot doesn't jump between copies as it turns
+  first.traverse(m => {
     if (!m.isMesh) return; if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
     const bb = m.geometry.boundingBox, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, rx = (bb.max.x - bb.min.x) / 2 * 0.9, rz = (bb.max.z - bb.min.z) / 2 * 0.9;
-    for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2, p = project(new THREE.Vector3(cx + rx * Math.cos(a), bb.max.y, cz + rz * Math.sin(a)).applyMatrix4(m.matrixWorld)); if (!best || p[0] > best[0]) best = p; }
+    const mid = new THREE.Vector3(cx, (bb.min.y + bb.max.y) / 2, cz).applyMatrix4(m.matrixWorld).y;
+    for (const yy of [bb.max.y, bb.min.y]) for (let k = 0; k < 24; k++) {   // the face that is up in the world (a flipped part's local bottom)
+      const a = k / 24 * Math.PI * 2, v = new THREE.Vector3(cx + rx * Math.cos(a), yy, cz + rz * Math.sin(a)).applyMatrix4(m.matrixWorld);
+      if (v.y < mid - 1e-6) continue; const p = project(v); if (!best || p[0] > best[0]) best = p; }
   });
   return best;
 }
